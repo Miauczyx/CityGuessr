@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CityGuessr</title>
+    <link rel="icon" type="image/x-icon" href="https://cdn-icons-png.flaticon.com/512/8354/8354127.png">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"> <!-- Dodanie FontAwesome dla ikony -->
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            color: #333;
+            display: flex;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            justify-content: flex-start;
+        }
+
+        h1 {
+            text-align: center;
+            color: #555;
+            margin: 20px 0;
+            width: 100%;
+        }
+
+        /* Podział ekranu */
+        #leftSide {
+            width: 50%;
+            padding: 20px;
+            overflow-y: scroll;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #rightSide {
+            width: 50%;
+            height: 100vh;
+        }
+
+        .country-section {
+            margin-bottom: 30px;
+            margin-right: 60px;
+            margin-left: 60px;
+        }
+
+        .country-section h3 {
+            color: #4CAF50;
+            margin-right: 60px;
+            margin-left: 69px;
+        }
+
+        .city-list {
+            list-style-type: none;
+            padding: 0;
+            margin-right: 60px;
+            margin-left: 60px;
+        }
+
+        .city-list li {
+            background-color: #fff;
+            padding: 10px;
+            margin: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .city-list li.selected {
+            background-color: #4caf50;
+            color: white;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .action-buttons {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        button {
+            background-color: #4caf50;
+            color: white;
+            padding: 10px;
+            border: none;
+            cursor: pointer;
+            margin: 0 10px; /* Zmniejszenie marginesów po prawej i lewej stronie */
+            width: auto; /* Ustawienie szerokości przycisków na automatyczną */
+        }
+        #zastosuj {
+            margin-left: 125px;
+            margin-right: 125px;
+        }
+
+        /* Styl dla ikonki informacji obok tytułu */
+        .info-icon {
+            margin-left: 10px;
+            cursor: pointer;
+        }
+
+        /* Styl dla dymka z tekstem */
+        .info-text {
+            opacity: 0;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 8px;
+            border-radius: 5px;
+            position: absolute;
+            z-index: 100;
+            top: 5px;
+            left: 25.5%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            transition: opacity 0.2s ease-in-out;
+            font-size: 11px;
+            font-family: monospace;
+        }
+
+        .info-icon:hover + .info-text,
+        .info-icon:focus + .info-text {
+            opacity: 1;
+        }
+
+
+        /* Styl dla pokazania dymka */
+        .info-icon:hover + .info-text {
+            display: block;
+        }
+        .continent-section {
+            margin-bottom: 40px;
+            padding: 10px;
+            border-bottom: 2px solid #333;
+        }
+
+        .continent-section h2 {
+            color: #333;
+            font-size: 22px;
+            margin-bottom: 10px;
+        }
+
+        .country-section {
+            margin-left: 20px; /* Przesunięcie krajów w prawo */
+        }
+
+
+    </style>
+</head>
+<body>
+
+    <div id="leftSide">
+        <h1>Wybierz Miasta
+            <span class="info-icon" tabindex="0">
+                <i class="fas fa-info-circle"></i>
+            </span>
+            <div class="info-text">Przejeżdżaj po elementach trzymając SHIFT aby zaznaczać je szybciej.  Naciśnij ENTER aby zastosować.  Naciśnij CTRL + F aby wyszukać miasto / kraj / kontynent.  Naciśnij R aby odznaczyć wszystko.</div>
+        </h1>
+                
+        <!-- Dymek z informacją, który będzie się pokazywał po najechaniu myszką -->
+        <div class="info-text">Przejeżdżaj po elementach trzymając SHIFT aby zaznaczać je szybciej.  Naciśnij ENTER aby zastosować.  Naciśnij CTRL + F aby wyszukać miasto / kraj / kontynent.  Naciśnij R aby odznaczyć wszystko.</div>
+
+        <!-- Przyciski do zaznaczania/odznaczania wszystkich miast -->
+        <div class="action-buttons">
+            <button onclick="selectAllCities()">Zaznacz Wszystkie</button>
+            <button onclick="deselectAllCities()">Odznacz Wszystkie</button>
+            <button onclick="selectAllCapitals()">Zaznacz Stolice</button>
+        </div>
+
+        <div id="cityList"></div>
+        <button id="zastosuj" onclick="applySelection()">Zastosuj</button>
+    </div>
+
+    <!-- Mapa -->
+    <div id="rightSide">
+        <div id="map" style="width: 100%; height: 100%;"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Przykładowa lista miast z tagiem kraju
+        let cities = [
+            // Europa
+
+            // Polska
+            { name: 'Warszawa (Warszawa, Warsaw)', lat: 52.2297, lng: 21.0122, tags: ['Europe', 'Poland', 'capital'] },
+            { name: 'Łódź (Łódź, Lodz)', lat: 51.7592, lng: 19.4560, tags: ['Europe', 'Poland'] },
+            { name: 'Kraków (Kraków, Krakow)', lat: 50.0647, lng: 19.9450, tags: ['Europe', 'Poland'] },
+            { name: 'Katowice (Katowice, Katowice)', lat: 50.2599, lng: 19.0216, tags: ['Europe', 'Poland'] },
+            { name: 'Lublin (Lublin, Lublin)', lat: 51.2465, lng: 22.5684, tags: ['Europe', 'Poland'] },
+            { name: 'Częstochowa (Częstochowa, Czestochowa)', lat: 50.8118, lng: 19.1203, tags: ['Europe', 'Poland'] },
+            { name: 'Szczecin (Szczecin, Szczecin)', lat: 53.4289, lng: 14.5530, tags: ['Europe', 'Poland'] },
+            { name: 'Bydgoszcz (Bydgoszcz, Bydgoszcz)', lat: 53.1235, lng: 18.0084, tags: ['Europe', 'Poland'] },
+            { name: 'Białystok (Białystok, Bialystok)', lat: 53.1325, lng: 23.1688, tags: ['Europe', 'Poland'] },
+            { name: 'Gdańsk (Gdańsk, Gdansk)', lat: 54.3520, lng: 18.6466, tags: ['Europe', 'Poland'] },
+            { name: 'Gdynia (Gdynia, Gdynia)', lat: 54.5189, lng: 18.5305, tags: ['Europe', 'Poland'] },
+            { name: 'Poznań (Poznań, Poznan)', lat: 52.4064, lng: 16.9252, tags: ['Europe', 'Poland'] },
+            { name: 'Wrocław (Wrocław, Wroclaw)', lat: 51.1079, lng: 17.0385, tags: ['Europe', 'Poland'] },
+            { name: 'Radom (Radom, Radom)', lat: 51.4026, lng: 21.1471, tags: ['Europe', 'Poland'] },
+            { name: 'Toruń (Toruń, Torun)', lat: 53.0138, lng: 18.5984, tags: ['Europe', 'Poland'] },
+            { name: 'Zamość (Zamość, Zamosc)', lat: 50.7174, lng: 23.2525, tags: ['Europe', 'Poland'] },
+            { name: 'Zielona Góra (Zielona Góra, Zielona Góra)', lat: 51.9356, lng: 15.5062, tags: ['Europe', 'Poland'] },
+            { name: 'Gorzów Wielkopolski (Gorzów Wielkopolski, Gorzów Wielkopolski)', lat: 52.7368, lng: 15.2288, tags: ['Europe', 'Poland'] },
+            { name: 'Opole (Opole, Opole)', lat: 50.6751, lng: 17.9213, tags: ['Europe', 'Poland'] },
+            { name: 'Koszalin (Koszalin, Koszalin)', lat: 54.1944, lng: 16.1722, tags: ['Europe', 'Poland'] },
+            { name: 'Olsztyn (Olsztyn, Olsztyn)', lat: 53.7784, lng: 20.4801, tags: ['Europe', 'Poland'] },
+
+            // Niemcy
+            { name: 'Berlin (Berlin, Berlin)', lat: 52.5200, lng: 13.4050, tags: ['Europe', 'Germany', 'capital'] },
+            { name: 'Kiel (Kilonia, Kiel)', lat: 54.3233, lng: 10.1228, tags: ['Europe', 'Germany'] },
+            { name: 'Hamburg (Hamburg, Hamburg)', lat: 53.5511, lng: 9.9937, tags: ['Europe', 'Germany'] },
+            { name: 'Bremen (Brema, Bremen)', lat: 53.0793, lng: 8.8017, tags: ['Europe', 'Germany'] },
+            { name: 'Hannover (Hanower, Hanover)', lat: 52.3759, lng: 9.7320, tags: ['Europe', 'Germany'] },
+            { name: 'Leipzig (Lipsk, Leipzig)', lat: 51.3397, lng: 12.3731, tags: ['Europe', 'Germany'] },
+            { name: 'Magdeburg (Magdeburg, Magdeburg)', lat: 52.1205, lng: 11.6276, tags: ['Europe', 'Germany'] },
+            { name: 'Dresden (Drezno, Dresden)', lat: 51.0504, lng: 13.7373, tags: ['Europe', 'Germany'] },
+            { name: 'Nürnberg (Norymberga, Nuremberg)', lat: 49.4521, lng: 11.0767, tags: ['Europe', 'Germany'] },
+            { name: 'München (Monachium, Munich)', lat: 48.1351, lng: 11.5820, tags: ['Europe', 'Germany'] },
+            { name: 'Stuttgart (Stuttgart, Stuttgart)', lat: 48.7758, lng: 9.1829, tags: ['Europe', 'Germany'] },
+            { name: 'Frankfurt am Main (Frankfurt nad Menem, Frankfurt)', lat: 50.1109, lng: 8.6821, tags: ['Europe', 'Germany'] },
+            { name: 'Wiesbaden (Wiesbaden, Wiesbaden)', lat: 50.0826, lng: 8.2400, tags: ['Europe', 'Germany'] },
+            { name: 'Mainz (Moguncja, Mainz)', lat: 49.9929, lng: 8.2473, tags: ['Europe', 'Germany'] },
+            { name: 'Saarbrücken (Saarbrücken, Saarbrucken)', lat: 49.2402, lng: 6.9969, tags: ['Europe', 'Germany'] },
+            { name: 'Duisburg (Duisburg, Duisburg)', lat: 51.4344, lng: 6.7623, tags: ['Europe', 'Germany'] },
+            { name: 'Essen (Essen, Essen)', lat: 51.4556, lng: 7.0116, tags: ['Europe', 'Germany'] },
+            { name: 'Dortmund (Dortmund, Dortmund)', lat: 51.5136, lng: 7.4653, tags: ['Europe', 'Germany'] },
+            { name: 'Wuppertal (Wuppertal, Wuppertal)', lat: 51.2562, lng: 7.1508, tags: ['Europe', 'Germany'] },
+            { name: 'Düsseldorf (Düsseldorf, Dusseldorf)', lat: 51.2277, lng: 6.7735, tags: ['Europe', 'Germany'] },
+            { name: 'Köln (Kolonia, Cologne)', lat: 50.9375, lng: 6.9603, tags: ['Europe', 'Germany'] },
+            { name: 'Bonn (Bonn, Bonn)', lat: 50.7374, lng: 7.0982, tags: ['Europe', 'Germany'] },
+            { name: 'Bielefeld (Bielefeld, Bielefeld)', lat: 52.0218, lng: 8.5325, tags: ['Europe', 'Germany'] },
+            { name: 'Schwerin (Schwerin, Schwerin)', lat: 53.6355, lng: 11.4152, tags: ['Europe', 'Germany'] },
+            { name: 'Erfurt (Erfurt, Erfurt)', lat: 50.9787, lng: 11.0328, tags: ['Europe', 'Germany'] },
+
+            // Białoruś
+            { name: 'Мінск (Mińsk, Minsk)', lat: 53.9000, lng: 27.5667, tags: ['Europe', 'Belarus', 'capital'] },
+            { name: 'Гомель (Homel, Gomel)', lat: 52.4412, lng: 30.9878, tags: ['Europe', 'Belarus'] },
+            { name: 'Гродна (Grodno, Grodno)', lat: 53.6694, lng: 23.8131, tags: ['Europe', 'Belarus'] },
+            { name: 'Віцебск (Witebsk, Vitebsk)', lat: 55.1927, lng: 30.1945, tags: ['Europe', 'Belarus'] },
+            { name: 'Салігорск (Salihorsk, Salihorsk)', lat: 52.7872, lng: 27.5415, tags: ['Europe', 'Belarus'] },
+            { name: 'Брэст (Brześć, Brest)', lat: 52.0975, lng: 23.7341, tags: ['Europe', 'Belarus'] },
+            { name: 'Магілёў (Mohylew, Mogilev)', lat: 53.9007, lng: 30.3310, tags: ['Europe', 'Belarus'] },
+            { name: 'Баранавічы (Baranowicze, Baranavichy)', lat: 53.1327, lng: 26.0139, tags: ['Europe', 'Belarus'] },
+            { name: 'Бабруйск (Bobrujsk, Babruysk)', lat: 53.1383, lng: 29.2214, tags: ['Europe', 'Belarus'] },
+
+            // Ukraina
+            { name: 'Київ (Kijów, Kyiv)', lat: 50.4501, lng: 30.5234, tags: ['Europe', 'Ukraine', 'capital'] },
+            { name: 'Севастополь (Sewastopol, Sevastopol)', lat: 44.6167, lng: 33.5250, tags: ['Europe', 'Ukraine'] },
+            { name: 'Сімферополь (Symferopol, Simferopol)', lat: 44.9482, lng: 34.1003, tags: ['Europe', 'Ukraine'] },
+            { name: 'Одеса (Odessa, Odesa)', lat: 46.4825, lng: 30.7233, tags: ['Europe', 'Ukraine'] },
+            { name: 'Херсон (Chersoń, Kherson)', lat: 46.6354, lng: 32.6169, tags: ['Europe', 'Ukraine'] },
+            { name: 'Миколаїв (Mikołajów, Mykolaiv)', lat: 46.9750, lng: 31.9946, tags: ['Europe', 'Ukraine'] },
+            { name: 'Кривий Ріг (Krzywy Róg, Kryvyi Rih)', lat: 47.9105, lng: 33.3918, tags: ['Europe', 'Ukraine'] },
+            { name: 'Запоріжжя (Zaporoże, Zaporizhzhia)', lat: 47.8388, lng: 35.1396, tags: ['Europe', 'Ukraine'] },
+            { name: 'Донецьк (Donieck, Donetsk)', lat: 48.0159, lng: 37.8028, tags: ['Europe', 'Ukraine'] },
+            { name: 'Луганськ (Ługańsk, Luhansk)', lat: 48.5740, lng: 39.3078, tags: ['Europe', 'Ukraine'] },
+            { name: 'Дніпро (Dnipro, Dnipro)', lat: 48.4647, lng: 35.0462, tags: ['Europe', 'Ukraine'] },
+            { name: 'Львів (Lwów, Lviv)', lat: 49.8419, lng: 24.0315, tags: ['Europe', 'Ukraine'] },
+            { name: 'Луцьк (Łuck, Lutsk)', lat: 50.7472, lng: 25.3254, tags: ['Europe', 'Ukraine'] },
+            { name: 'Рівне (Równe, Rivne)', lat: 50.6199, lng: 26.2516, tags: ['Europe', 'Ukraine'] },
+            { name: 'Харків (Charków, Kharkiv)', lat: 49.9935, lng: 36.2304, tags: ['Europe', 'Ukraine'] },
+            { name: 'Чернігів (Czernihów, Chernihiv)', lat: 51.4982, lng: 31.2893, tags: ['Europe', 'Ukraine'] },
+            { name: 'Суми (Sumy, Sumy)', lat: 50.9077, lng: 34.7981, tags: ['Europe', 'Ukraine'] },
+            { name: 'Черкаси (Czerkasy, Cherkasy)', lat: 49.4285, lng: 32.0621, tags: ['Europe', 'Ukraine'] },
+            { name: 'Івано-Франківськ (Iwano-Frankiwsk, Ivano-Frankivsk)', lat: 48.9226, lng: 24.7097, tags: ['Europe', 'Ukraine'] },
+            { name: 'Чернівці (Czerniowce, Chernivtsi)', lat: 48.2908, lng: 25.9346, tags: ['Europe', 'Ukraine'] },
+            { name: 'Тернопіль (Tarnopol, Ternopil)', lat: 49.5535, lng: 25.5948, tags: ['Europe', 'Ukraine'] },
+            { name: 'Вінниця (Winnica, Vinnytsia)', lat: 49.2331, lng: 28.4682, tags: ['Europe', 'Ukraine'] },
+            { name: 'Мукачево (Mukaczewo, Mukachevo)', lat: 48.4392, lng: 22.7177, tags: ['Europe', 'Ukraine'] },
+            { name: 'Житомир (Żytomierz, Zhytomyr)', lat: 50.2547, lng: 28.6587, tags: ['Europe', 'Ukraine'] },
+            { name: 'Хмельницький (Chmielnicki, Khmelnytskyi)', lat: 49.4216, lng: 26.9965, tags: ['Europe', 'Ukraine'] },
+            { name: 'Маріуполь (Mariupol, Mariupol)', lat: 47.0951, lng: 37.5413, tags: ['Europe', 'Ukraine'] },
+
+            // Rosja
+            { name: 'Москва (Moskwa, Moscow)', lat: 55.7558, lng: 37.6173, tags: ['Europe', 'Russia', 'capital'] },
+            { name: 'Мурманск (Murmańsk, Murmansk)', lat: 68.9585, lng: 33.0827, tags: ['Europe', 'Russia'] },
+            { name: 'Архангельск (Archangielsk, Arkhangelsk)', lat: 64.5399, lng: 40.5152, tags: ['Europe', 'Russia'] },
+            { name: 'Санкт-Петербург (Sankt Petersburg, St. Petersburg)', lat: 59.9343, lng: 30.3351, tags: ['Europe', 'Russia'] },
+            { name: 'Великий Новгород (Wielki Nowogród, Veliky Novgorod)', lat: 58.5215, lng: 31.2755, tags: ['Europe', 'Russia'] },
+            { name: 'Псков (Psków, Pskov)', lat: 57.8194, lng: 28.3318, tags: ['Europe', 'Russia'] },
+            { name: 'Ярославль (Jarosław, Yaroslavl)', lat: 57.6261, lng: 39.8845, tags: ['Europe', 'Russia'] },
+            { name: 'Нижний Новгород (Niżny Nowogród, Nizhny Novgorod)', lat: 56.2965, lng: 43.9361, tags: ['Europe', 'Russia'] },
+            { name: 'Владимир (Włodzimierz, Vladimir)', lat: 56.1291, lng: 40.4066, tags: ['Europe', 'Russia'] },
+            { name: 'Иваново (Iwanowo, Ivanovo)', lat: 56.9994, lng: 40.9728, tags: ['Europe', 'Russia'] },
+            { name: 'Кострома (Kostroma, Kostroma)', lat: 57.7680, lng: 40.9269, tags: ['Europe', 'Russia'] },
+            { name: 'Вологда (Wołogda, Vologda)', lat: 59.2239, lng: 39.8837, tags: ['Europe', 'Russia'] },
+            { name: 'Калуга (Kaługa, Kaluga)', lat: 54.5293, lng: 36.2754, tags: ['Europe', 'Russia'] },
+            { name: 'Тула (Tuła, Tula)', lat: 54.1920, lng: 37.6172, tags: ['Europe', 'Russia'] },
+            { name: 'Рязань (Riazań, Ryazan)', lat: 54.6296, lng: 39.7421, tags: ['Europe', 'Russia'] },
+            { name: 'Смоленск (Smoleńsk, Smolensk)', lat: 54.7903, lng: 32.0504, tags: ['Europe', 'Russia'] },
+            { name: 'Тверь (Twer, Tver)', lat: 56.8578, lng: 35.9211, tags: ['Europe', 'Russia'] },
+            { name: 'Брянск (Briańsk, Bryansk)', lat: 53.2521, lng: 34.3717, tags: ['Europe', 'Russia'] },
+            { name: 'Орёл (Orzeł, Oryol)', lat: 52.9651, lng: 36.0785, tags: ['Europe', 'Russia'] },
+            { name: 'Липецк (Lipieck, Lipetsk)', lat: 52.6031, lng: 39.5708, tags: ['Europe', 'Russia'] },
+            { name: 'Тамбов (Tambow, Tambov)', lat: 52.7212, lng: 41.4523, tags: ['Europe', 'Russia'] },
+            { name: 'Курск (Kursk, Kursk)', lat: 51.7308, lng: 36.1925, tags: ['Europe', 'Russia'] },
+            { name: 'Белгород (Biełgorod, Belgorod)', lat: 50.5977, lng: 36.5855, tags: ['Europe', 'Russia'] },
+            { name: 'Воронеж (Woroneż, Voronezh)', lat: 51.6615, lng: 39.2003, tags: ['Europe', 'Russia'] },
+            { name: 'Саратов (Saratów, Saratov)', lat: 51.5331, lng: 46.0341, tags: ['Europe', 'Russia'] },
+            { name: 'Волгоград (Wołgograd, Volgograd)', lat: 48.7080, lng: 44.5133, tags: ['Europe', 'Russia'] },
+            { name: 'Ростов-на-Дону (Rostów nad Donem, Rostov-on-Don)', lat: 47.2357, lng: 39.7015, tags: ['Europe', 'Russia'] },
+            { name: 'Краснодар (Krasnodar, Krasnodar)', lat: 45.0355, lng: 38.9753, tags: ['Europe', 'Russia'] },
+            { name: 'Махачкала (Machaczkała, Makhachkala)', lat: 42.9831, lng: 47.5047, tags: ['Europe', 'Russia'] },
+            { name: 'Астрахань (Astrachań, Astrakhan)', lat: 46.3476, lng: 48.0336, tags: ['Europe', 'Russia'] },
+            { name: 'Грозный (Grozny, Grozny)', lat: 43.3177, lng: 45.6989, tags: ['Europe', 'Russia'] },
+            { name: 'Ставрополь (Stawropol, Stavropol)', lat: 45.0448, lng: 41.9690, tags: ['Europe', 'Russia'] },
+            { name: 'Ульяновск (Uljanowsk, Ulyanovsk)', lat: 54.3167, lng: 48.4031, tags: ['Europe', 'Russia'] },
+            { name: 'Самара (Samara, Samara)', lat: 53.2038, lng: 50.1606, tags: ['Europe', 'Russia'] },
+            { name: 'Тольятти (Togliatti, Tolyatti)', lat: 53.5078, lng: 49.4204, tags: ['Europe', 'Russia'] },
+            { name: 'Казань (Kazań, Kazan)', lat: 55.7961, lng: 49.1064, tags: ['Europe', 'Russia'] },
+            { name: 'Уфа (Ufa, Ufa)', lat: 54.7388, lng: 55.9721, tags: ['Europe', 'Russia'] },
+            { name: 'Оренбург (Orenburg, Orenburg)', lat: 51.7682, lng: 55.0967, tags: ['Europe', 'Russia'] },
+            { name: 'Челябинск (Czelabińsk, Chelyabinsk)', lat: 55.1600, lng: 61.4008, tags: ['Europe', 'Russia'] },
+            { name: 'Ижевск (Iżewsk, Izhevsk)', lat: 56.8528, lng: 53.2045, tags: ['Europe', 'Russia'] },
+            { name: 'Пермь (Perm, Perm)', lat: 58.0174, lng: 56.2855, tags: ['Europe', 'Russia'] },
+            { name: 'Екатеринбург (Jekaterynburg, Yekaterinburg)', lat: 56.8389, lng: 60.6057, tags: ['Europe', 'Russia'] },
+            { name: 'Киров (Kirow, Kirov)', lat: 58.6035, lng: 49.6679, tags: ['Europe', 'Russia'] },
+            { name: 'Пенза (Penza, Penza)', lat: 53.1945, lng: 45.0192, tags: ['Europe', 'Russia'] },
+            { name: 'Тюмень (Tiumeń, Tyumen)', lat: 57.1522, lng: 65.5272, tags: ['Europe', 'Russia'] },
+            { name: 'Омск (Omsk, Omsk)', lat: 54.9924, lng: 73.3686, tags: ['Europe', 'Russia'] },
+            { name: 'Томск (Tomsk, Tomsk)', lat: 56.4846, lng: 84.9480, tags: ['Europe', 'Russia'] },
+            { name: 'Новосибирск (Nowosybirsk, Novosibirsk)', lat: 55.0084, lng: 82.9357, tags: ['Europe', 'Russia'] },
+            { name: 'Красноярск (Krasnojarsk, Krasnoyarsk)', lat: 56.0153, lng: 92.8932, tags: ['Europe', 'Russia'] },
+            { name: 'Иркутск (Irkuck, Irkutsk)', lat: 52.2870, lng: 104.2810, tags: ['Europe', 'Russia'] },
+            { name: 'Улан-Удэ (Ułan Ude, Ulan-Ude)', lat: 51.8335, lng: 107.5842, tags: ['Europe', 'Russia'] },
+            { name: 'Чита (Czyta, Chita)', lat: 52.0326, lng: 113.4995, tags: ['Europe', 'Russia'] },
+            { name: 'Владивосток (Władywostok, Vladivostok)', lat: 43.1198, lng: 131.8869, tags: ['Europe', 'Russia'] },
+            { name: 'Южно-Сахалинск (Jużnosachalińsk, Yuzhno-Sakhalinsk)', lat: 46.9591, lng: 142.7380, tags: ['Europe', 'Russia'] },
+            { name: 'Петропавловск-Камчатский (Piotro-Pawłowsk Kamczacki, Petropavlovsk-Kamchatsky)', lat: 53.0452, lng: 158.6483, tags: ['Europe', 'Russia'] },
+            { name: 'Якутск (Jakuck, Yakutsk)', lat: 62.0355, lng: 129.6755, tags: ['Europe', 'Russia'] },
+
+            // Litwa
+            { name: 'Vilnius (Wilno, Vilnius)', lat: 54.6872, lng: 25.2797, tags: ['Europe', 'Lithuania', 'capital'] },
+            { name: 'Klaipėda (Kłajpeda, Klaipeda)', lat: 55.7033, lng: 21.1443, tags: ['Europe', 'Lithuania'] },
+            { name: 'Kaunas (Kowno, Kaunas)', lat: 54.8985, lng: 23.9036, tags: ['Europe', 'Lithuania'] },
+
+            // Łotwa
+            { name: 'Rīga (Ryga, Riga)', lat: 56.9496, lng: 24.1052, tags: ['Europe', 'Latvia', 'capital'] },
+            { name: 'Daugavpils (Dyneburg, Daugavpils)', lat: 55.8756, lng: 26.5350, tags: ['Europe', 'Latvia'] },
+
+            // Estonia
+            { name: 'Tallinn (Tallin, Tallinn)', lat: 59.4370, lng: 24.7536, tags: ['Europe', 'Estonia', 'capital'] },
+            { name: 'Tartu (Tartu, Tartu)', lat: 58.3776, lng: 26.7290, tags: ['Europe', 'Estonia'] },
+
+            // UK
+            { name: 'London (Londyn, London)', lat: 51.5074, lng: -0.1278, tags: ['Europe', 'UK', 'capital'] },
+            { name: 'Plymouth (Plymouth, Plymouth)', lat: 50.3755, lng: -4.1427, tags: ['Europe', 'UK'] },
+            { name: 'Southampton (Southampton, Southampton)', lat: 50.9097, lng: -1.4044, tags: ['Europe', 'UK'] },
+            { name: 'Oxford (Oksford, Oxford)', lat: 51.7520, lng: -1.2577, tags: ['Europe', 'UK'] },
+            { name: 'Portsmouth (Portsmouth, Portsmouth)', lat: 50.8198, lng: -1.0880, tags: ['Europe', 'UK'] },
+            { name: 'Exeter (Exeter, Exeter)', lat: 50.7184, lng: -3.5339, tags: ['Europe', 'UK'] },
+            { name: 'Ipswich (Ipswich, Ipswich)', lat: 52.0567, lng: 1.1482, tags: ['Europe', 'UK'] },
+            { name: 'Colchester (Colchester, Colchester)', lat: 51.8892, lng: 0.9042, tags: ['Europe', 'UK'] },
+            { name: 'Norwich (Norwich, Norwich)', lat: 52.6309, lng: 1.2974, tags: ['Europe', 'UK'] },
+            { name: 'Peterborough (Peterborough, Peterborough)', lat: 52.5739, lng: -0.2505, tags: ['Europe', 'UK'] },
+            { name: 'Cambridge (Cambridge, Cambridge)', lat: 52.2053, lng: 0.1218, tags: ['Europe', 'UK'] },
+            { name: 'Luton (Luton, Luton)', lat: 51.8787, lng: -0.4200, tags: ['Europe', 'UK'] },
+            { name: 'Bristol (Bristol, Bristol)', lat: 51.4545, lng: -2.5879, tags: ['Europe', 'UK'] },
+            { name: 'Cardiff (Cardiff, Cardiff)', lat: 51.4816, lng: -3.1791, tags: ['Europe', 'UK'] },
+            { name: 'Swansea (Swansea, Swansea)', lat: 51.6214, lng: -3.9436, tags: ['Europe', 'UK'] },
+            { name: 'Birmingham (Birmingham, Birmingham)', lat: 52.4862, lng: -1.8904, tags: ['Europe', 'UK'] },
+            { name: 'Liverpool (Liverpool, Liverpool)', lat: 53.4084, lng: -2.9916, tags: ['Europe', 'UK'] },
+            { name: 'Nottingham (Nottingham, Nottingham)', lat: 52.9548, lng: -1.1581, tags: ['Europe', 'UK'] },
+            { name: 'Sheffield (Sheffield, Sheffield)', lat: 53.3811, lng: -1.4701, tags: ['Europe', 'UK'] },
+            { name: 'Manchester (Manchester, Manchester)', lat: 53.4808, lng: -2.2426, tags: ['Europe', 'UK'] },
+            { name: 'Leeds (Leeds, Leeds)', lat: 53.8008, lng: -1.5491, tags: ['Europe', 'UK'] },
+            { name: 'Hull (Hull, Hull)', lat: 53.7676, lng: -0.3274, tags: ['Europe', 'UK'] },
+            { name: 'York (York, York)', lat: 53.9590, lng: -1.0815, tags: ['Europe', 'UK'] },
+            { name: 'Douglas (Douglas, Douglas)', lat: 54.1500, lng: -4.4800, tags: ['Europe', 'UK'] },
+            { name: 'Middlesbrough (Middlesbrough, Middlesbrough)', lat: 54.5742, lng: -1.2359, tags: ['Europe', 'UK'] },
+            { name: 'Newcastle upon Tyne (Newcastle, Newcastle upon Tyne)', lat: 54.9783, lng: -1.6174, tags: ['Europe', 'UK'] },
+            { name: 'Edinburgh (Edynburg, Edinburgh)', lat: 55.9533, lng: -3.1883, tags: ['Europe', 'UK'] },
+            { name: 'Glasgow (Glasgow, Glasgow)', lat: 55.8642, lng: -4.2518, tags: ['Europe', 'UK'] },
+            { name: 'Dundee (Dundee, Dundee)', lat: 56.4620, lng: -2.9707, tags: ['Europe', 'UK'] },
+            { name: 'Aberdeen (Aberdeen, Aberdeen)', lat: 57.1497, lng: -2.0943, tags: ['Europe', 'UK'] },
+            { name: 'Inverness (Inverness, Inverness)', lat: 57.4778, lng: -4.2247, tags: ['Europe', 'UK'] },
+            { name: 'Bournemouth (Bournemouth, Bournemouth)', lat: 50.7209, lng: -1.8795, tags: ['Europe', 'UK'] },
+            { name: 'Belfast (Belfast, Belfast)', lat: 54.5973, lng: -5.9301, tags: ['Europe', 'UK'] },
+
+            // Irlandia
+            { name: 'Dublin (Dublin, Dublin)', lat: 53.3498, lng: -6.2603, tags: ['Europe', 'Ireland', 'capital'] },
+            { name: 'Limerick (Limerick, Limerick)', lat: 52.6648, lng: -8.6267, tags: ['Europe', 'Ireland'] },
+            { name: 'Galway (Galway, Galway)', lat: 53.2707, lng: -9.0568, tags: ['Europe', 'Ireland'] },
+            { name: 'Cork (Cork, Cork)', lat: 51.8979, lng: -8.4750, tags: ['Europe', 'Ireland'] },
+
+            // Finlandia
+            { name: 'Helsinki (Helsinki, Helsinki)', lat: 60.1692, lng: 24.9402, tags: ['Europe', 'Finland', 'capital'] },
+            { name: 'Turku (Turku, Turku)', lat: 60.4518, lng: 22.2666, tags: ['Europe', 'Finland'] },
+            { name: 'Tampere (Tampere, Tampere)', lat: 61.4991, lng: 23.7871, tags: ['Europe', 'Finland'] },
+            { name: 'Pori (Pori, Pori)', lat: 61.4823, lng: 21.7875, tags: ['Europe', 'Finland'] },
+            { name: 'Kotka (Kotka, Kotka)', lat: 60.4667, lng: 26.9226, tags: ['Europe', 'Finland'] },
+            { name: 'Lahti (Lahti, Lahti)', lat: 60.9820, lng: 25.6612, tags: ['Europe', 'Finland'] },
+            { name: 'Kouvola (Kouvola, Kouvola)', lat: 60.8667, lng: 26.7167, tags: ['Europe', 'Finland'] },
+            { name: 'Jyväskylä (Jyväskylä, Jyväskylä)', lat: 62.2426, lng: 25.7479, tags: ['Europe', 'Finland'] },
+            { name: 'Oulu (Oulu, Oulu)', lat: 65.0124, lng: 25.4682, tags: ['Europe', 'Finland'] },
+            { name: 'Mariehamn (Mariehamn, Mariehamn)', lat: 60.0987, lng: 19.9349, tags: ['Europe', 'Finland'] },
+
+            // Szwecja
+            { name: 'Stockholm (Stockholm, Stockholm)', lat: 59.3293, lng: 18.0686, tags: ['Europe', 'Sweden', 'capital'] },
+            { name: 'Göteborg (Göteborg, Gothenburg)', lat: 57.7089, lng: 11.9746, tags: ['Europe', 'Sweden'] },
+            { name: 'Malmö (Malmö, Malmo)', lat: 55.6049, lng: 13.0038, tags: ['Europe', 'Sweden'] },
+            { name: 'Helsingborg (Helsingborg, Helsingborg)', lat: 56.0465, lng: 12.6945, tags: ['Europe', 'Sweden'] },
+            { name: 'Lund (Lund, Lund)', lat: 55.7047, lng: 13.1910, tags: ['Europe', 'Sweden'] },
+            { name: 'Jönköping (Jönköping, Jonkoping)', lat: 57.7817, lng: 14.1568, tags: ['Europe', 'Sweden'] },
+            { name: 'Linköping (Linköping, Linkoping)', lat: 58.4108, lng: 15.6214, tags: ['Europe', 'Sweden'] },
+            { name: 'Norrköping (Norrköping, Norrkoping)', lat: 58.5904, lng: 16.1791, tags: ['Europe', 'Sweden'] },
+            { name: 'Umeå (Umeå, Umea)', lat: 63.8258, lng: 20.2630, tags: ['Europe', 'Sweden'] },
+            { name: 'Uppsala (Uppsala, Uppsala)', lat: 59.8586, lng: 17.6389, tags: ['Europe', 'Sweden'] },
+            { name: 'Västerås (Västerås, Vasteras)', lat: 59.6099, lng: 16.5447, tags: ['Europe', 'Sweden'] },
+            { name: 'Örebro (Örebro, Orebro)', lat: 59.2753, lng: 15.2134, tags: ['Europe', 'Sweden'] },
+
+            // Norwegia
+            { name: 'Oslo (Oslo, Oslo)', lat: 59.9139, lng: 10.7522, tags: ['Europe', 'Norway', 'capital'] },
+            { name: 'Stavanger (Stavanger, Stavanger)', lat: 58.9690, lng: 5.7331, tags: ['Europe', 'Norway'] },
+            { name: 'Bergen (Bergen, Bergen)', lat: 60.3929, lng: 5.3242, tags: ['Europe', 'Norway'] },
+            { name: 'Trondheim (Trondheim, Trondheim)', lat: 63.4305, lng: 10.3951, tags: ['Europe', 'Norway'] },
+
+            // Dania
+            { name: 'København (Kopenhaga, Copenhagen)', lat: 55.6761, lng: 12.5683, tags: ['Europe', 'Denmark', 'capital'] },
+            { name: 'Aarhus (Aarhus, Aarhus)', lat: 56.1629, lng: 10.2039, tags: ['Europe', 'Denmark'] },
+            { name: 'Odense (Odense, Odense)', lat: 55.4038, lng: 10.4024, tags: ['Europe', 'Denmark'] },
+            { name: 'Aalborg (Aalborg, Aalborg)', lat: 57.0488, lng: 9.9217, tags: ['Europe', 'Denmark'] },
+            { name: 'Esbjerg (Esbjerg, Esbjerg)', lat: 55.4764, lng: 8.4595, tags: ['Europe', 'Denmark'] },
+            { name: 'Randers (Randers, Randers)', lat: 56.4620, lng: 10.0347, tags: ['Europe', 'Denmark'] },
+
+            // Islandia
+            { name: 'Reykjavík (Reykjavík, Reykjavik)', lat: 64.1355, lng: -21.8954, tags: ['Europe', 'Iceland', 'capital'] },
+
+            // Holandia
+            { name: 'Amsterdam (Amsterdam, Amsterdam)', lat: 52.3676, lng: 4.9041, tags: ['Europe', 'Netherlands', 'capital'] },
+            { name: 'Rotterdam (Rotterdam, Rotterdam)', lat: 51.9225, lng: 4.47917, tags: ['Europe', 'Netherlands'] },
+            { name: 'Den Haag (Haga, The Hague)', lat: 52.0705, lng: 4.3007, tags: ['Europe', 'Netherlands'] },
+
+            // Belgia
+            { name: 'Gent (Gandawa, Ghent)', lat: 51.0543, lng: 3.7174, tags: ['Europe', 'Belgium'] },
+            { name: 'Antwerpen (Antwerpia, Antwerp)', lat: 51.2194, lng: 4.4025, tags: ['Europe', 'Belgium'] },
+            { name: 'Brussel (Bruksela, Brussels)', lat: 50.8503, lng: 4.3517, tags: ['Europe', 'Belgium', 'capital'] },
+            { name: 'Liège (Lige, Liege)', lat: 50.6293, lng: 5.5797, tags: ['Europe', 'Belgium'] },
+
+            // Luksemburg
+            { name: 'Lëtzebuerg (Luksemburg, Luxembourg City)', lat: 49.6117, lng: 6.13, tags: ['Europe', 'Luxembourg', 'capital'] },
+
+            // Portugalia
+            { name: 'Porto (Porto, Porto)', lat: 41.1579, lng: -8.6291, tags: ['Europe', 'Portugal'] },
+            { name: 'Lisboa (Lizbona, Lisbon)', lat: 38.7169, lng: -9.1395, tags: ['Europe', 'Portugal', 'capital'] },
+            { name: 'Coimbra (Coimbra, Coimbra)', lat: 40.2033, lng: -8.4103, tags: ['Europe', 'Portugal'] },
+
+            // Hiszpania
+            { name: 'Barcelona (Barcelona, Barcelona)', lat: 41.3784, lng: 2.1925, tags: ['Europe', 'Spain'] },
+            { name: 'Bilbao (Bilbao, Bilbao)', lat: 43.2630, lng: -2.9350, tags: ['Europe', 'Spain'] },
+            { name: 'Málaga (Malaga, Malaga)', lat: 36.7213, lng: -4.4216, tags: ['Europe', 'Spain'] },
+            { name: 'Sevilla (Sewilla, Seville)', lat: 37.3886, lng: -5.9823, tags: ['Europe', 'Spain'] },
+            { name: 'Valencia (Walencja, Valencia)', lat: 39.4699, lng: -0.3763, tags: ['Europe', 'Spain'] },
+            { name: 'Palma (Palma, Palma)', lat: 39.5696, lng: 2.6502, tags: ['Europe', 'Spain'] },
+            { name: 'Madrid (Madryt, Madrid)', lat: 40.4168, lng: -3.7038, tags: ['Europe', 'Spain', 'capital'] },
+            { name: 'Murcia (Murcja, Murcia)', lat: 37.9834, lng: -1.1296, tags: ['Europe', 'Spain'] },
+            { name: 'Zaragoza (Saragossa, Zaragoza)', lat: 41.6488, lng: -0.8891, tags: ['Europe', 'Spain'] },
+
+            // Francja
+            { name: 'Paris (Paryż, Paris)', lat: 48.8566, lng: 2.3522, tags: ['Europe', 'France', 'capital'] },
+            { name: 'Nantes (Nantes, Nantes)', lat: 47.2186, lng: -1.5536, tags: ['Europe', 'France'] },
+            { name: 'Toulouse (Tuluza, Toulouse)', lat: 43.6047, lng: 1.4442, tags: ['Europe', 'France'] },
+            { name: 'Montpellier (Montpellier, Montpellier)', lat: 43.6117, lng: 3.8767, tags: ['Europe', 'France'] },
+            { name: 'Marseille (Marsylia, Marseille)', lat: 43.2965, lng: 5.3698, tags: ['Europe', 'France'] },
+            { name: 'Nice (Nicea, Nice)', lat: 43.7102, lng: 7.2620, tags: ['Europe', 'France'] },
+            { name: 'Lyon (Lyon, Lyon)', lat: 45.75, lng: 4.85, tags: ['Europe', 'France'] },
+            { name: 'Bordeaux (Bordeaux, Bordeaux)', lat: 44.8378, lng: -0.5792, tags: ['Europe', 'France'] },
+            { name: 'Rouen (Rouen, Rouen)', lat: 49.4431, lng: 1.0993, tags: ['Europe', 'France'] },
+            { name: 'Lille (Lille, Lille)', lat: 50.6292, lng: 3.0573, tags: ['Europe', 'France'] },
+
+            // Włochy
+            { name: 'Roma (Rzym, Rome)', lat: 41.9028, lng: 12.4964, tags: ['Europe', 'Italy', 'capital'] },
+            { name: 'Napoli (Neapol, Naples)', lat: 40.8522, lng: 14.2681, tags: ['Europe', 'Italy'] },
+            { name: 'Bari (Bari, Bari)', lat: 41.1171, lng: 16.8714, tags: ['Europe', 'Italy'] },
+            { name: 'Catania (Katania, Catania)', lat: 37.5079, lng: 15.0830, tags: ['Europe', 'Italy'] },
+            { name: 'Palermo (Palermo, Palermo)', lat: 38.1157, lng: 13.3615, tags: ['Europe', 'Italy'] },
+            { name: 'Firenze (Florencja, Florence)', lat: 43.7696, lng: 11.2558, tags: ['Europe', 'Italy'] },
+            { name: 'Bologna (Bolonia, Bologna)', lat: 44.4949, lng: 11.3426, tags: ['Europe', 'Italy'] },
+            { name: 'Venezia (Wenecja, Venice)', lat: 45.4408, lng: 12.3155, tags: ['Europe', 'Italy'] },
+            { name: 'Milano (Mediolan, Milan)', lat: 45.4642, lng: 9.1900, tags: ['Europe', 'Italy'] },
+            { name: 'Torino (Turyn, Turin)', lat: 45.0703, lng: 7.6869, tags: ['Europe', 'Italy'] },
+            { name: 'Genova (Genua, Genoa)', lat: 44.4056, lng: 8.9463, tags: ['Europe', 'Italy'] },
+            { name: 'Verona (Werona, Verona)', lat: 45.4384, lng: 10.9916, tags: ['Europe', 'Italy'] },
+            { name: 'Brescia (Brescia, Brescia)', lat: 45.5415, lng: 10.2118, tags: ['Europe', 'Italy'] },
+            { name: 'Cagliari (Cagliari, Cagliari)', lat: 39.2238, lng: 9.1217, tags: ['Europe', 'Italy'] },
+
+            // Szwajcaria
+            { name: 'Zürich (Zurych, Zurich)', lat: 47.3784, lng: 8.5402, tags: ['Europe', 'Switzerland'] },
+            { name: 'Bern (Berno, Bern)', lat: 46.9481, lng: 7.4474, tags: ['Europe', 'Switzerland', 'capital'] },
+            { name: 'Genève (Genewa, Geneva)', lat: 46.2044, lng: 6.1432, tags: ['Europe', 'Switzerland'] },
+            { name: 'Basel (Bazylea, Basel)', lat: 47.5596, lng: 7.5886, tags: ['Europe', 'Switzerland'] },
+
+            // Austria
+            { name: 'Innsbruck (Innsbruck, Innsbruck)', lat: 47.2681, lng: 11.3923, tags: ['Europe', 'Austria'] },
+            { name: 'Salzburg (Salzburg, Salzburg)', lat: 47.8103, lng: 13.0436, tags: ['Europe', 'Austria'] },
+            { name: 'Wien (Wiedeń, Vienna)', lat: 48.2082, lng: 16.3738, tags: ['Europe', 'Austria', 'capital'] },
+            { name: 'Graz (Graz, Graz)', lat: 47.0707, lng: 15.4395, tags: ['Europe', 'Austria'] },
+            { name: 'Linz (Linz, Linz)', lat: 48.3064, lng: 14.2861, tags: ['Europe', 'Austria'] },
+
+            // Węgry
+            { name: 'Budapest (Budapeszt, Budapest)', lat: 47.4979, lng: 19.0402, tags: ['Europe', 'Hungary', 'capital'] },
+            { name: 'Győr (Györ, Győr)', lat: 47.6875, lng: 17.6502, tags: ['Europe', 'Hungary'] },
+            { name: 'Szombathely (Szombathely, Szombathely)', lat: 47.2305, lng: 16.6200, tags: ['Europe', 'Hungary'] },
+            { name: 'Pécs (Pecs, Pécs)', lat: 46.0727, lng: 18.2292, tags: ['Europe', 'Hungary'] },
+            { name: 'Nyíregyháza (Nyíregyháza, Nyíregyháza)', lat: 47.9500, lng: 21.7167, tags: ['Europe', 'Hungary'] },
+            { name: 'Szeged (Szeged, Szeged)', lat: 46.2530, lng: 20.1414, tags: ['Europe', 'Hungary'] },
+            { name: 'Debrecen (Debreczyn, Debrecen)', lat: 47.5316, lng: 21.6273, tags: ['Europe', 'Hungary'] },
+
+            // Rumunia
+            { name: 'Timișoara (Timișoara, Timișoara)', lat: 45.7489, lng: 21.2087, tags: ['Europe', 'Romania'] },
+            { name: 'București (Bukareszt, Bucharest)', lat: 44.4268, lng: 26.1025, tags: ['Europe', 'Romania', 'capital'] },
+            { name: 'Brașov (Braszów, Brașov)', lat: 45.6594, lng: 25.6102, tags: ['Europe', 'Romania'] },
+            { name: 'Cluj-Napoca (Kluż-Napoka, Cluj-Napoca)', lat: 46.7712, lng: 23.6237, tags: ['Europe', 'Romania'] },
+            { name: 'Iași (Jassy, Iași)', lat: 47.1585, lng: 27.6010, tags: ['Europe', 'Romania'] },
+
+            // Mołdawia
+            { name: 'Chișinău (Kiszyniów, Chisinau)', lat: 47.0105, lng: 28.8638, tags: ['Europe', 'Moldova', 'capital'] },
+            { name: 'Tiraspol (Tiraspol, Tiraspol)', lat: 46.8440, lng: 29.6244, tags: ['Europe', 'Moldova'] },
+            { name: 'Bălți (Bălți, Bălți)', lat: 47.7625, lng: 27.9265, tags: ['Europe', 'Moldova'] },
+
+            // Czechy
+            { name: 'Praha (Praga, Prague)', lat: 50.0755, lng: 14.4378, tags: ['Europe', 'Czechia', 'capital'] },
+            { name: 'Brno (Brno, Brno)', lat: 49.1951, lng: 16.6068, tags: ['Europe', 'Czechia'] },
+            { name: 'Ostrava (Ostrava, Ostrava)', lat: 49.8342, lng: 18.2921, tags: ['Europe', 'Czechia'] },
+            { name: 'Plzeň (Pilzno, Pilsen)', lat: 49.7475, lng: 13.3776, tags: ['Europe', 'Czechia'] },
+            { name: 'Liberec (Liberec, Liberec)', lat: 50.7670, lng: 15.0560, tags: ['Europe', 'Czechia'] },
+
+            // Słowacja
+            { name: 'Bratislava (Bratysława, Bratislava)', lat: 48.1482, lng: 17.1067, tags: ['Europe', 'Slovakia', 'capital'] },
+            { name: 'Košice (Koszyce, Košice)', lat: 48.7168, lng: 21.2611, tags: ['Europe', 'Slovakia'] },
+            { name: 'Prešov (Preszów, Prešov)', lat: 48.9915, lng: 21.2618, tags: ['Europe', 'Slovakia'] },
+            { name: 'Žilina (Żylina, Žilina)', lat: 49.2210, lng: 18.7395, tags: ['Europe', 'Slovakia'] },
+            { name: 'Nitra (Nitra, Nitra)', lat: 48.3084, lng: 18.0827, tags: ['Europe', 'Slovakia'] },
+            { name: 'Banská Bystrica (Bańska Bystrzyca, Banská Bystrica)', lat: 48.7388, lng: 19.1451, tags: ['Europe', 'Slovakia'] },
+
+            // Słowenia
+            { name: 'Ljubljana (Lublana, Ljubljana)', lat: 46.0511, lng: 14.5051, tags: ['Europe', 'Slovenia', 'capital'] },
+            { name: 'Maribor (Maribor, Maribor)', lat: 46.5547, lng: 15.6458, tags: ['Europe', 'Slovenia'] },
+
+            // Chorwacja
+            { name: 'Zagreb (Zagrzeb, Zagreb)', lat: 45.8131, lng: 15.978, tags: ['Europe', 'Croatia', 'capital'] },
+            { name: 'Rijeka (Rijeka, Rijeka)', lat: 45.3271, lng: 14.4411, tags: ['Europe', 'Croatia'] },
+            { name: 'Pula (Pula, Pula)', lat: 44.8683, lng: 13.8484, tags: ['Europe', 'Croatia'] },
+            { name: 'Osijek (Osijek, Osijek)', lat: 45.5511, lng: 18.6954, tags: ['Europe', 'Croatia'] },
+            { name: 'Zadar (Zadar, Zadar)', lat: 44.1194, lng: 15.2314, tags: ['Europe', 'Croatia'] },
+            { name: 'Split (Split, Split)', lat: 43.5081, lng: 16.4402, tags: ['Europe', 'Croatia'] },
+            { name: 'Dubrovnik (Dubrownik, Dubrovnik)', lat: 42.6507, lng: 18.0944, tags: ['Europe', 'Croatia'] },
+
+            // Bośnia i Hercegowina
+            { name: 'Banja Luka (Banja Luka, Banja Luka)', lat: 44.7720, lng: 17.1910, tags: ['Europe', 'Bosnia'] },
+            { name: 'Sarajevo (Sarajewo, Sarajevo)', lat: 43.8486, lng: 18.3564, tags: ['Europe', 'Bosnia', 'capital'] },
+
+            // Serbia
+            { name: 'Београд (Belgrad, Belgrade)', lat: 44.8176, lng: 20.4633, tags: ['Europe', 'Serbia', 'capital'] },
+            { name: 'Нови Сад (Nowy Sad, Novi Sad)', lat: 45.2671, lng: 19.8335, tags: ['Europe', 'Serbia'] },
+            { name: 'Ниш (Niš, Niš)', lat: 43.3217, lng: 21.8954, tags: ['Europe', 'Serbia'] },
+            { name: 'Крагујевац (Kragujevac, Kragujevac)', lat: 44.0165, lng: 20.9151, tags: ['Europe', 'Serbia'] },
+            { name: 'Зрењанин (Zrenjanin, Zrenjanin)', lat: 45.3700, lng: 20.3978, tags: ['Europe', 'Serbia'] },
+
+            // Kosowo
+            { name: 'Приштина (Priština, Pristina)', lat: 42.6720, lng: 21.1655, tags: ['Europe', 'Kosovo', 'capital'] },
+            { name: 'Призрен (Prizren, Prizren)', lat: 42.0103, lng: 20.7495, tags: ['Europe', 'Kosovo'] },
+            { name: 'Ђаковица (Gjakova, Gjakova)', lat: 42.3758, lng: 20.4264, tags: ['Europe', 'Kosovo'] },
+            { name: 'Митровица (Mitrovica, Mitrovica)', lat: 42.8833, lng: 20.8683, tags: ['Europe', 'Kosovo'] },
+
+            // Macedonia Północna
+            { name: 'Скопје (Skopje, Skopje)', lat: 41.9981, lng: 21.4254, tags: ['Europe', 'North Macedonia', 'capital'] },
+            { name: 'Куманово (Kumanowo, Kumanovo)', lat: 42.1341, lng: 21.7167, tags: ['Europe', 'North Macedonia'] },
+
+            // Albania
+            { name: 'Tiranë (Tirana, Tirana)', lat: 41.3275, lng: 19.8189, tags: ['Europe', 'Albania', 'capital'] },
+            { name: 'Durrës (Durrës, Durrës)', lat: 41.3233, lng: 19.4483, tags: ['Europe', 'Albania'] },
+            { name: 'Shkodër (Szkodr, Shkodër)', lat: 42.0693, lng: 19.5111, tags: ['Europe', 'Albania'] },
+            { name: 'Vlorë (Wlora, Vlorë)', lat: 40.4661, lng: 19.4895, tags: ['Europe', 'Albania'] },
+            { name: 'Elbasan (Elbasan, Elbasan)', lat: 41.1125, lng: 20.0828, tags: ['Europe', 'Albania'] },
+
+            // Grecja
+            { name: 'Θεσσαλονίκη (Saloniki, Thessaloniki)', lat: 40.6401, lng: 22.9444, tags: ['Europe', 'Greece'] },
+            { name: 'Αθήνα (Ateny, Athens)', lat: 37.9838, lng: 23.7275, tags: ['Europe', 'Greece', 'capital'] },
+            { name: 'Ηράκλειο (Heraklion, Heraklion)', lat: 35.3387, lng: 25.1442, tags: ['Europe', 'Greece'] },
+            { name: 'Πάτρα (Patras, Patras)', lat: 38.2466, lng: 21.7346, tags: ['Europe', 'Greece'] },
+
+            // Bułgaria
+            { name: 'София (Sofia, Sofia)', lat: 42.6977, lng: 23.3219, tags: ['Europe', 'Bulgaria', 'capital'] },
+            { name: 'Пловдив (Płowdiw, Plovdiv)', lat: 42.1354, lng: 24.7455, tags: ['Europe', 'Bulgaria'] },
+            { name: 'Варна (Warna, Varna)', lat: 43.2140, lng: 27.9147, tags: ['Europe', 'Bulgaria'] },
+
+            // Czarnogóra
+            { name: 'Подгорица (Podgorica, Podgorica)', lat: 42.4411, lng: 19.2636, tags: ['Europe', 'Montenegro', 'capital'] },
+
+
+
+            // Ameryka Północna
+            { name: 'Washington, D.C. (Waszyngton, Washington, D.C.)', lat: 38.9072, lng: -77.0369, tags: ['North America', 'USA', 'capital'] },
+            { name: 'Seattle (Seattle, Seattle)', lat: 47.6062, lng: -122.3321, tags: ['North America', 'USA'] },
+            { name: 'Portland (Portland, Portland)', lat: 45.5051, lng: -122.6750, tags: ['North America', 'USA'] },
+            { name: 'San Francisco (San Francisco, San Francisco)', lat: 37.7749, lng: -122.4194, tags: ['North America', 'USA'] },
+            { name: 'Sacramento (Sacramento, Sacramento)', lat: 38.5816, lng: -121.4944, tags: ['North America', 'USA'] },
+            { name: 'Los Angeles (Los Angeles, Los Angeles)', lat: 34.0522, lng: -118.2437, tags: ['North America', 'USA'] },
+            { name: 'San Diego (San Diego, San Diego)', lat: 32.7157, lng: -117.1611, tags: ['North America', 'USA'] },
+            { name: 'San Jose (San Jose, San Jose)', lat: 37.3382, lng: -121.8863, tags: ['North America', 'USA'] },
+            { name: 'Las Vegas (Las Vegas, Las Vegas)', lat: 36.1699, lng: -115.1398, tags: ['North America', 'USA'] },
+            { name: 'Phoenix (Phoenix, Phoenix)', lat: 33.4484, lng: -112.0740, tags: ['North America', 'USA'] },
+            { name: 'Tucson (Tucson, Tucson)', lat: 32.2226, lng: -110.9747, tags: ['North America', 'USA'] },
+            { name: 'Albuquerque (Albuquerque, Albuquerque)', lat: 35.0844, lng: -106.6504, tags: ['North America', 'USA'] },
+            { name: 'Fort Worth (Fort Worth, Fort Worth)', lat: 32.7555, lng: -97.3308, tags: ['North America', 'USA'] },
+            { name: 'Dallas (Dallas, Dallas)', lat: 32.7767, lng: -96.7970, tags: ['North America', 'USA'] },
+            { name: 'Houston (Houston, Houston)', lat: 29.7604, lng: -95.3698, tags: ['North America', 'USA'] },
+            { name: 'Austin (Austin, Austin)', lat: 30.2672, lng: -97.7431, tags: ['North America', 'USA'] },
+            { name: 'San Antonio (San Antonio, San Antonio)', lat: 29.4241, lng: -98.4936, tags: ['North America', 'USA'] },
+            { name: 'New Orleans (Nowy Orlean, New Orleans)', lat: 29.9511, lng: -90.0715, tags: ['North America', 'USA'] },
+            { name: 'Memphis (Memphis, Memphis)', lat: 35.1495, lng: -90.0490, tags: ['North America', 'USA'] },
+            { name: 'Oklahoma City (Oklahoma City, Oklahoma City)', lat: 35.4676, lng: -97.5164, tags: ['North America', 'USA'] },
+            { name: 'Kansas City (Kansas City, Kansas City)', lat: 39.0997, lng: -94.5786, tags: ['North America', 'USA'] },
+            { name: 'Tampa (Tampa, Tampa)', lat: 27.9506, lng: -82.4572, tags: ['North America', 'USA'] },
+            { name: 'Miami (Miami, Miami)', lat: 25.7617, lng: -80.1918, tags: ['North America', 'USA'] },
+            { name: 'Orlando (Orlando, Orlando)', lat: 28.5383, lng: -81.3792, tags: ['North America', 'USA'] },
+            { name: 'Jacksonville (Jacksonville, Jacksonville)', lat: 30.3322, lng: -81.6557, tags: ['North America', 'USA'] },
+            { name: 'Atlanta (Atlanta, Atlanta)', lat: 33.7490, lng: -84.3880, tags: ['North America', 'USA'] },
+            { name: 'Nashville (Nashville, Nashville)', lat: 36.1627, lng: -86.7816, tags: ['North America', 'USA'] },
+            { name: 'St. Louis (St. Louis, St. Louis)', lat: 38.6270, lng: -90.1994, tags: ['North America', 'USA'] },
+            { name: 'Salt Lake City (Salt Lake City, Salt Lake City)', lat: 40.7608, lng: -111.8910, tags: ['North America', 'USA'] },
+            { name: 'Minneapolis (Minneapolis, Minneapolis)', lat: 44.9778, lng: -93.2650, tags: ['North America', 'USA'] },
+            { name: 'Chicago (Chicago, Chicago)', lat: 41.8781, lng: -87.6298, tags: ['North America', 'USA'] },
+            { name: 'Indianapolis (Indianapolis, Indianapolis)', lat: 39.7684, lng: -86.1580, tags: ['North America', 'USA'] },
+            { name: 'Detroit (Detroit, Detroit)', lat: 42.3314, lng: -83.0458, tags: ['North America', 'USA'] },
+            { name: 'Philadelphia (Filadelfia, Philadelphia)', lat: 39.9526, lng: -75.1652, tags: ['North America', 'USA'] },
+            { name: 'New York (Nowy Jork, New York)', lat: 40.7128, lng: -74.0060, tags: ['North America', 'USA'] },
+            { name: 'Charlotte (Charlotte, Charlotte)', lat: 35.2271, lng: -80.8431, tags: ['North America', 'USA'] },
+            { name: 'Denver (Denver, Denver)', lat: 39.7392, lng: -104.9903, tags: ['North America', 'USA'] },
+            { name: 'Columbus (Kolumbus, Columbus)', lat: 39.9612, lng: -82.9988, tags: ['North America', 'USA'] },
+            { name: 'El Paso (El Paso, El Paso)', lat: 31.7619, lng: -106.4850, tags: ['North America', 'USA'] },
+            { name: 'Boston (Boston, Boston)', lat: 42.3601, lng: -71.0589, tags: ['North America', 'USA'] },
+            { name: 'Baltimore (Baltimore, Baltimore)', lat: 39.2904, lng: -76.6122, tags: ['North America', 'USA'] },
+            { name: 'Milwaukee (Milwaukee, Milwaukee)', lat: 43.0389, lng: -87.9065, tags: ['North America', 'USA'] },
+            { name: 'Fresno (Fresno, Fresno)', lat: 36.7378, lng: -119.7871, tags: ['North America', 'USA'] },
+            { name: 'Colorado Springs (Colorado Springs, Colorado Springs)', lat: 38.8339, lng: -104.8214, tags: ['North America', 'USA'] },
+            { name: 'Omaha (Omaha, Omaha)', lat: 41.2565, lng: -95.9345, tags: ['North America', 'USA'] },
+            { name: 'Honolulu (Honolulu, Honolulu)', lat: 21.3069, lng: -157.8583, tags: ['North America', 'USA'] },
+            { name: 'Juneau (Juneau, Juneau)', lat: 58.3019, lng: -134.4197, tags: ['North America', 'USA'] },
+        ];
+
+        
+        // Tablica przechowująca wybrane miasta
+        let selectedCities = JSON.parse(localStorage.getItem('customcities')) || [];
+        // Tablica przechowująca odniesienia do markerów
+        let cityMarkers = [];
+        let shiftPressed = false; // Zmienna do śledzenia stanu lewego Shiftu
+        // Funkcja do wykrywania naciśnięcia lewego Shiftu
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Shift') {
+                shiftPressed = true;
+            }
+        });
+
+        document.addEventListener('keyup', function (e) {
+            if (e.key === 'Shift') {
+                shiftPressed = false;
+            }
+        });
+
+        // Funkcja do obsługi naciśnięcia klawisza "R" (odznacz wszystkie)
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'r' || e.key === 'R') { // Sprawdź, czy naciśnięty klawisz to 'r' lub 'R'
+                deselectAllCities(); // Wywołaj funkcję odznaczania wszystkich miast
+            }
+        });
+        // Funkcja zaznaczająca tylko stolice
+        function selectAllCapitals() {
+            selectedCities = cities.filter(city => city.tags.includes('capital'));
+            localStorage.setItem('customcities', JSON.stringify(selectedCities));
+            renderCityList();
+            renderCityMarkers();
+        }
+
+
+        // Inicjalizacja mapy
+        const map = L.map('map').setView([52.2297, 21.0122], 5); // Ustawienie widoku na Europę
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors, © CartoDB'
+        }).addTo(map);
+
+
+
+        // Dodawanie znaczników do mapy
+        function renderCityMarkers() {
+            // Usuwamy wszystkie istniejące markery
+            cityMarkers.forEach(marker => marker.remove());
+            cityMarkers = [];
+
+            selectedCities.forEach(city => {
+                const markerColor = city.tags.includes('capital') ? 'red' : 'blue'; // Czerwony dla stolic
+                const marker = L.marker([city.lat, city.lng], { title: city.name, icon: L.icon({
+                    iconUrl: markerColor === 'red' ? 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png' : 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41]
+                })}).addTo(map);
+
+                // Dodanie popup z nazwą miasta po kliknięciu na marker
+                marker.bindPopup(`<b>${city.name}</b>`);
+                // Przechowywanie odniesienia do znacznika
+                cityMarkers.push(marker);
+            });
+        }
+
+        // Funkcja renderująca listę miast pogrupowaną według krajów
+        // Funkcja renderująca listę miast
+        function renderCityList() {
+            const cityListElement = document.getElementById('cityList');
+            cityListElement.innerHTML = ''; // Czyszczenie listy przed ponownym wyrenderowaniem
+
+            const continents = {}; // Obiekt do grupowania miast według kontynentów
+
+            cities.forEach(city => {
+                const continent = city.tags.find(tag => ['Europe', 'North America'].includes(tag)); // Znalezienie kontynentu w tagach
+
+                if (!continent) return; // Jeśli miasto nie ma tagu kontynentu, pomijamy
+
+                if (!continents[continent]) {
+                    continents[continent] = {}; // Tworzymy obiekt dla kontynentu
+                }
+
+                city.tags.forEach(tag => {
+                    if (!['Europe', 'North America', 'capital'].includes(tag)) { // Pomijamy kontynent i 'capital'
+                        if (!continents[continent][tag]) {
+                            continents[continent][tag] = []; // Tworzymy obiekt dla kraju w danym kontynencie
+                        }
+                        continents[continent][tag].push(city);
+                    }
+                });
+            });
+
+            // **Rysowanie listy miast w podziale na kontynenty i kraje**
+            for (let continent in continents) {
+                const continentSection = document.createElement('div');
+                continentSection.classList.add('continent-section');
+
+                const continentTitle = document.createElement('h2'); // Nagłówek kontynentu
+                continentTitle.textContent = continent;
+                continentSection.appendChild(continentTitle);
+
+                for (let country in continents[continent]) {
+                    const countrySection = document.createElement('div');
+                    countrySection.classList.add('country-section');
+
+                    const countryTitle = document.createElement('h3');
+                    countryTitle.textContent = country;
+                    countrySection.appendChild(countryTitle);
+
+                    const cityList = document.createElement('ul');
+                    cityList.classList.add('city-list');
+
+                    continents[continent][country].forEach(city => {
+                        const li = document.createElement('li');
+                        li.textContent = city.name;
+
+                        // Jeśli miasto jest już wybrane, zaznacz je
+                        if (selectedCities.some(selectedCity => selectedCity.name === city.name)) {
+                            li.classList.add('selected');
+                        }
+
+                        // Obsługa najechania myszką (Shift trzymany)
+                        li.addEventListener('mouseover', (event) => {
+                            if (shiftPressed && !li.classList.contains('selected')) {
+                                li.classList.add('selected');
+                                selectedCities.push(city);
+                                renderCityMarkers();
+                            }
+                        });
+
+                        li.onclick = () => toggleCitySelection(city, li);
+                        cityList.appendChild(li);
+                    });
+
+                    countrySection.appendChild(cityList);
+                    continentSection.appendChild(countrySection);
+                }
+
+                cityListElement.appendChild(continentSection);
+            }
+        }
+
+
+
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') { // Sprawdzamy, czy naciśnięto Enter
+                applySelection(); // Wywołujemy funkcję "Zastosuj"
+            }
+        });
+
+
+        // Funkcja do dodawania lub usuwania miasta z selectedCities
+        function toggleCitySelection(city, li) {
+            if (li.classList.contains('selected')) {
+                li.classList.remove('selected');
+                selectedCities = selectedCities.filter(c => c.name !== city.name);
+            } else {
+                li.classList.add('selected');
+                selectedCities.push(city);
+            }
+
+            // Odświeżenie znaczników po zmianach w wyborze miast
+            renderCityMarkers();
+        }
+
+        // Funkcja do zapisania wybranych miast do localStorage
+        function applySelection() {
+            localStorage.setItem('customcities', JSON.stringify(selectedCities));
+            window.location.href = 'index.html';
+        }
+
+        // Funkcja do zaznaczenia wszystkich miast
+        function selectAllCities() {
+            const cityList = document.querySelectorAll('.city-list li');
+            cityList.forEach((li, index) => {
+                if (!li.classList.contains('selected')) {
+                    li.classList.add('selected');
+                    selectedCities.push(cities[index]);
+                }
+            });
+
+            renderCityMarkers();
+        }
+
+        // Funkcja do odznaczenia wszystkich miast
+        function deselectAllCities() {
+            const cityList = document.querySelectorAll('.city-list li');
+            cityList.forEach((li) => {
+                if (li.classList.contains('selected')) {
+                    li.classList.remove('selected');
+                }
+            });
+            selectedCities = [];
+            renderCityMarkers();
+        }
+
+        // Załaduj listę miast przy załadowaniu strony
+        renderCityList();
+        renderCityMarkers();
+    </script>
+
+</body>
+</html>

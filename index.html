@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <title>CityGuessr</title>
+    <link rel="icon" type="image/x-icon" href="https://cdn-icons-png.flaticon.com/512/8354/8354127.png">
+    <style>
+        /* Stylizacja mapy i interfejsu */
+        #map { height: 1170px; width: 100%; margin-bottom: 20px; }
+        #info {
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+            position: absolute;
+            top: 20px; /* Zwiększaj do pożądanej wysokości */
+            left: 46%;
+            transform: translateX(-50%);
+            width: 100%;
+            text-align: center;
+            margin-top: 20px; /* Możesz dostosować marginesy */
+        }
+
+
+
+        .correct { color: rgb(0, 180, 0); font-weight: bold; }
+        .incorrect { color: red; }
+        body { background-color: black; color: white; font-family: monospace; }
+        h1 { font-family: monospace; 
+            text-align: left;
+        }
+        button { font-family: monospace; background-color: black; color: white; border: 1px solid white; }
+        button:hover { background-color: white; color: black; border: 1px solid black; }
+        #filters { padding-bottom: 10px; float: right; }
+        #custom {
+            width: 232px;
+            height: 50px;
+            font-weight: bold;
+        }
+        #map { margin-top: 10px; }
+        #continent { font-family: monospace; background-color: black; color: white; border: 1px solid white; }
+        #continent:hover { background-color: white; color: black; border: 1px solid black; }
+        #map:focus {
+            outline: none;
+        }
+        #tryby {
+            float: right;
+        }
+        
+        /* Aktywna klasa dla podświetlonego przycisku */
+        .active-mode {
+            background-color: #646464; /* Zielony kolor dla aktywnego trybu */
+            color: white;
+        }
+        #winStreakRecord {
+            text-align: left;
+            padding: 0px;
+            margin-left: 0px ;
+        }
+        .pspace {
+            font-size: 13px;
+            color: rgb(117, 117, 117);
+        }
+        .blue {
+            color: blue;
+        }
+    </style>
+</head>
+<body>
+    <div id="tryby">
+        <button id="roundsBtn" onclick="startGame('rounds')">Tryb 10 Rund</button>
+        <button id="winStreakBtn" onclick="startGame('winStreak')">Tryb Win Streak</button>
+    </div>
+    <h1>Miauczyx CityGuessr!</h1>
+
+    <!-- Filtry -->
+    <div id="filters">
+        <button id="custom" onclick="openCustomPage()">Custom</button>
+    </div>
+
+    <!-- Rekord Win Streak -->
+    <div id="winStreakRecord">Rekord Win Streak: 0</div>
+
+    <!-- Informacje o stanie gry -->
+    <div id="info"></div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const map = L.map('map').setView([20, 0], 2);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors, © CartoDB'
+        }).addTo(map);
+
+        let cities = [
+            // Europa
+
+            // Polska
+            { name: 'Warszawa (Warszawa, Warsaw)', lat: 52.2297, lng: 21.0122, tags: ['Europe', 'Poland', 'capital'] },
+            { name: 'Łódź (Łódź, Lodz)', lat: 51.7592, lng: 19.4560, tags: ['Europe', 'Poland'] },
+            { name: 'Kraków (Kraków, Krakow)', lat: 50.0647, lng: 19.9450, tags: ['Europe', 'Poland'] },
+            { name: 'Katowice (Katowice, Katowice)', lat: 50.2599, lng: 19.0216, tags: ['Europe', 'Poland'] },
+            { name: 'Lublin (Lublin, Lublin)', lat: 51.2465, lng: 22.5684, tags: ['Europe', 'Poland'] },
+            { name: 'Częstochowa (Częstochowa, Czestochowa)', lat: 50.8118, lng: 19.1203, tags: ['Europe', 'Poland'] },
+            { name: 'Szczecin (Szczecin, Szczecin)', lat: 53.4289, lng: 14.5530, tags: ['Europe', 'Poland'] },
+
+        ];
+
+        // Retrieve custom cities from localStorage
+        const customCities = JSON.parse(localStorage.getItem('customcities')) || [];
+
+        // Filter cities based on the selected custom cities
+        const filteredCities = cities.filter(city => customCities.some(c => c.name === city.name));
+
+        let targetCity;
+        let score = 0;
+        let rounds = 5;
+        let streak = 0;
+        let awaitingNextTurn = false;
+        let correctMarker;
+        let userMarker;
+        let gameOver = false;
+        let gameMode = 'rounds'; // Domyślny tryb to "rounds"
+        // Pobieranie rekordu winstreak z LocalStorage przy starcie
+        let winStreakRecord = localStorage.getItem('winStreakRecord') ? parseInt(localStorage.getItem('winStreakRecord')) : 0;
+        document.getElementById('winStreakRecord').innerHTML = `Rekord Win Streak: ${winStreakRecord}`;
+
+
+        
+
+        function openCustomPage() {
+            window.location.href = 'custom.html';
+        }
+        // Funkcja do losowania miasta
+        function getRandomCity() {
+            if (gameOver) return;
+            const index = Math.floor(Math.random() * filteredCities.length);
+            targetCity = filteredCities[index];
+            document.getElementById('info').innerHTML = `Zaznacz na mapie miasto: <span class="correct">${targetCity.name}</span>`;
+        }
+
+        // Funkcja do obliczania odległości
+        function calculateDistance(lat1, lng1, lat2, lng2) {
+            const R = 6371; // Promień Ziemi w km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLng = (lng2 - lng1) * Math.PI / 180;
+
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        // Funkcja obliczania punktów w zależności od odległości
+        function calculatePoints(distance) {
+            let points = 0;
+            if (distance <= 10) {
+                // Jeśli w promieniu 50 km od miasta, 1000 punktów
+                points = 1000;
+            } else {
+                // Punkty zmniejszają się w zależności od odległości
+                points = Math.max(0, Math.round(1000 - distance));
+            }
+            return points;
+        }
+
+        // Funkcja do rozpoczęcia gry
+        function startGame(mode) {
+            gameMode = mode;
+            score = 0;
+            rounds = gameMode === 'rounds' ? 10 : Infinity; // Tryb 10 rund lub win streak
+            streak = 0;
+            awaitingNextTurn = false;
+            gameOver = false;
+
+            // Podświetlanie aktywnego trybu
+            document.getElementById('roundsBtn').classList.remove('active-mode');
+            document.getElementById('winStreakBtn').classList.remove('active-mode');
+            if (gameMode === 'rounds') {
+                document.getElementById('roundsBtn').classList.add('active-mode');
+            } else {
+                document.getElementById('winStreakBtn').classList.add('active-mode');
+            }
+
+            // Usuwanie poprzednich znaczników
+            if (correctMarker) {
+                map.removeLayer(correctMarker);
+                correctMarker = null;
+            }
+            if (userMarker) {
+                map.removeLayer(userMarker);
+                userMarker = null;
+            }
+
+            getRandomCity();
+        }
+
+
+        map.on('click', function(e) {
+            if (awaitingNextTurn || gameOver) return;
+
+            const clickedLat = e.latlng.lat;
+            const clickedLng = e.latlng.lng;
+            const distance = calculateDistance(clickedLat, clickedLng, targetCity.lat, targetCity.lng);
+            
+            // Obliczanie punktów
+            const points = calculatePoints(distance);
+
+            // Jeśli punkty to 1000, zwiększ streak
+            if (points === 1000) {
+                streak++;
+                if (gameMode === 'winStreak' && streak > winStreakRecord) { 
+                    winStreakRecord = streak;
+                    localStorage.setItem('winStreakRecord', winStreakRecord); // Zapis rekordu do LocalStorage
+                    document.getElementById('winStreakRecord').innerHTML = `Rekord Win Streak: ${winStreakRecord}`;
+                }
+            } else {
+
+                // Jeśli punkty nie wynoszą 1000, zakończ streak
+                streak = 0;
+                document.getElementById('info').innerHTML = 
+                    `<br><span class="incorrect">Źle zgadłeś! Twoja seria zakończona.</span><br>
+                    <button onclick="startGame('winStreak')">Zagraj ponownie</button>`;
+            }
+
+            score += points;
+
+            if (correctMarker) map.removeLayer(correctMarker);
+            correctMarker = L.marker([targetCity.lat, targetCity.lng], { title: "Prawidłowe miasto" })
+                .bindPopup(`<b>${targetCity.name}</b><br>To było prawidłowe miasto!`).addTo(map);
+
+            if (userMarker) map.removeLayer(userMarker);
+            userMarker = L.marker([clickedLat, clickedLng], {
+                title: "Twoje kliknięcie",
+                icon: L.icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41]
+                })
+            }).bindPopup("Twoje kliknięcie").addTo(map);
+            if (points === 1000 && gameMode !== 'winStreak') {
+                document.getElementById('info').innerHTML = 
+                    `Twoja odległość od <span class="correct">${targetCity.name}</span> to <span class="incorrect">${distance.toFixed(2)} km</span>.<br>
+                    Zdobyłeś <span class="correct">${points}</span> punktów!💎.<br>
+                    <p class="pspace">naciśnij spacje<p>`;
+            } else if (points !== 1000 && gameMode !== 'winStreak') {
+                document.getElementById('info').innerHTML = 
+                    `Twoja odległość od <span class="correct">${targetCity.name}</span> to <span class="incorrect">${distance.toFixed(2)} km</span>.<br>
+                    Zdobyłeś <span class="correct">${points}</span> punktów!.<br>
+                    <p class="pspace">naciśnij spacje<p>`;
+            } else if (gameMode === 'winStreak' && points === 1000) {
+                document.getElementById('info').innerHTML =
+                    `Twoja odległość od <span class="correct">${targetCity.name}</span> to <span class="incorrect">${distance.toFixed(2)} km</span>.<br>
+                    Trafiłeś w miasto!💎. Twoj aktualny streak to <span class="blue">${streak}</span><br>
+                    <p class="pspace">naciśnij spacje<p>`;
+            }
+
+            awaitingNextTurn = true;
+
+            // if (gameMode === 'winStreak' && points !== 1000) {
+            //     document.getElementById('info').innerHTML += 
+            //         `<br><span class="incorrect">Źle zgadłeś! Twoja seria zakończona.</span><br>
+            //         <button onclick="startGame('winStreak')">Zagraj ponownie</button>`;
+            // }
+
+            if (gameMode === 'rounds') {
+                rounds--;
+                if (rounds <= 0) {
+                    gameOver = true;
+                }
+            }
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.code === 'Space' && awaitingNextTurn) {
+                awaitingNextTurn = false;
+
+                // Usuwanie znaczników po zakończeniu rundy
+                if (correctMarker) {
+                    map.removeLayer(correctMarker);
+                    correctMarker = null;
+                }
+                if (userMarker) {
+                    map.removeLayer(userMarker);
+                    userMarker = null;
+                }
+
+                // Jeśli zakończyły się rundy, pokaż wynik końcowy
+                if (gameOver && rounds <= 0) {
+                    document.getElementById('info').innerHTML = 
+                        `Gra zakończona! Twój wynik to: <span class="correct">${score}</span> punktów!<br>
+                        <button onclick="startGame(gameMode)">Zagraj ponownie</button>`;
+                } else {
+                    getRandomCity();
+                }
+            }
+        });
+
+        startGame(gameMode);
+    </script>
+</body>
+</html>
