@@ -1094,7 +1094,7 @@
             { name: 'Douala (Douala, Douala)', lat: 4.0511, lng: 9.7085, tags: ['Africa', 'Cameroon'] },
 
             // Republika Środkowoafrykańska
-            { name: 'Bangui (Bangui, Bangui)', lat: 4.3947, lng: 18.5582, tags: ['Africa', 'Central African Republic', 'capital'] },
+            { name: 'Bangui (Bangi, Bangui)', lat: 4.3947, lng: 18.5582, tags: ['Africa', 'Central African Republic', 'capital'] },
 
             // Czad
             { name: 'N’Djamena (Ndżamena, N’Djamena)', lat: 12.1348, lng: 15.0557, tags: ['Africa', 'Chad', 'capital'] },
@@ -1103,7 +1103,7 @@
             { name: 'موروني (Moroni, Moroni)', lat: -11.7172, lng: 43.2471, tags: ['Africa', 'Comoros', 'capital'] },
 
             // Demokratyczna Republika Konga
-            { name: 'كينشاسا (Kinshasa, Kinshasa)', lat: -4.4419, lng: 15.2663, tags: ['Africa', 'Democratic Republic of the Congo', 'capital'] },
+            { name: 'كينشاسا (Kinszasa, Kinshasa)', lat: -4.4419, lng: 15.2663, tags: ['Africa', 'Democratic Republic of the Congo', 'capital'] },
             { name: 'Lubumbashi (Lubumbashi, Lubumbashi)', lat: -11.6683, lng: 27.4769, tags: ['Africa', 'Democratic Republic of the Congo'] },
 
             // Dżibuti
@@ -1269,6 +1269,7 @@
         let score = 0;
         let rounds = 5;
         let streak = 0;
+        let fstreak = 0;
         let awaitingNextTurn = false;
         let correctMarker;
         let userMarker;
@@ -1327,6 +1328,7 @@
             score = 0;
             rounds = gameMode === 'rounds' ? 10 : Infinity; // Tryb 10 rund lub win streak
             streak = 0;
+            fstreak = 0;
             awaitingNextTurn = false;
             gameOver = false;
 
@@ -1348,10 +1350,15 @@
                 map.removeLayer(userMarker);
                 userMarker = null;
             }
+            if (dashedLine) {
+                map.removeLayer(dashedLine);
+                dashedLine = null;
+            }
 
             getRandomCity();
         }
 
+        let dashedLine;
 
         map.on('click', function(e) {
             if (awaitingNextTurn || gameOver) return;
@@ -1371,6 +1378,12 @@
                     localStorage.setItem('winStreakRecord', winStreakRecord); // Zapis rekordu do LocalStorage
                     document.getElementById('winStreakRecord').innerHTML = `Rekord Win Streak: ${winStreakRecord}`;
                 }
+            } else if (points !== 1000 && cities.length !== filteredCities.length) {
+                fstreak = 0;
+                document.getElementById('info').innerHTML = 
+                    `Twoja odległość od <span class="correct">${targetCity.name}</span> to <span class="incorrect">${distance.toFixed(2)} km</span>.
+                    <br><span class="incorrect">Źle zgadłeś! Twoja seria zakończona. Musisz być przynajmniej 10km od celu aby otrzymać streak</span><br>
+                    <button onclick="startGame('winStreak')">Zagraj ponownie</button>`;
             } else {
 
                 // Jeśli punkty nie wynoszą 1000, zakończ streak
@@ -1386,6 +1399,19 @@
             if (correctMarker) map.removeLayer(correctMarker);
             correctMarker = L.marker([targetCity.lat, targetCity.lng], { title: "Prawidłowe miasto" })
                 .bindPopup(`<b>${targetCity.name}</b><br>To było prawidłowe miasto!`).addTo(map);
+            
+            if (dashedLine) {
+                map.removeLayer(dashedLine);  // Usuń poprzednią linię, jeśli istnieje
+            }
+
+            dashedLine = L.polyline([
+                [clickedLat, clickedLng], [targetCity.lat, targetCity.lng]
+            ], {
+                color: 'black',       // Kolor linii (czarny)
+                dashArray: '5,10',    // Styl przerywanej linii (5px kreska, 10px przerwa)
+                weight: 2             // Grubość linii
+            }).addTo(map);
+
 
             if (userMarker) map.removeLayer(userMarker);
             userMarker = L.marker([clickedLat, clickedLng], {
@@ -1415,19 +1441,15 @@
                     Trafiłeś w miasto!💎. Twoj aktualny streak to <span class="blue">${streak}</span><br>
                     <p class="pspace">naciśnij spacje<p>`;
             } else if (gameMode === 'winStreak' && points === 1000 && streak === 0) {
+                fstreak ++;
                 document.getElementById('info').innerHTML =
                     `Twoja odległość od <span class="correct">${targetCity.name}</span> to <span class="incorrect">${distance.toFixed(2)} km</span>.<br>
-                    Trafiłeś w miasto!. Ale aby zdobywać win streak musisz zaznaczyć wszystkie miasta w opcji custom<br>
+                    Trafiłeś w miasto!💎. Twoj streak to <span class="blue">${fstreak}</span> <p class="pspace">Ale aby zdobywać win streak rekord musisz zaznaczyć wszystkie miasta w opcji custom</p><br>
                     <p class="pspace">naciśnij spacje<p>`;
             }
 
             awaitingNextTurn = true;
 
-            // if (gameMode === 'winStreak' && points !== 1000) {
-            //     document.getElementById('info').innerHTML += 
-            //         `<br><span class="incorrect">Źle zgadłeś! Twoja seria zakończona.</span><br>
-            //         <button onclick="startGame('winStreak')">Zagraj ponownie</button>`;
-            // }
 
             if (gameMode === 'rounds') {
                 rounds--;
@@ -1451,6 +1473,12 @@
                     userMarker = null;
                 }
 
+                // Usuwanie przerywanej linii
+                if (dashedLine) {
+                    map.removeLayer(dashedLine);
+                    dashedLine = null;
+                }
+
                 // Jeśli zakończyły się rundy, pokaż wynik końcowy
                 if (gameOver && rounds <= 0 && cities.length !== filteredCities.length) {
                     document.getElementById('info').innerHTML = 
@@ -1465,12 +1493,13 @@
                     }
                     document.getElementById('info').innerHTML = 
                         `Gra zakończona! Twój wynik to: <span class="correct">${score} / 10000</span> punktów!<br>
-                        <button onclick="startGame(gameMode)">Zagraj ponownie</button> <br>`
+                        <button onclick="startGame(gameMode)">Zagraj ponownie</button> <br>`;
                 } else {
                     getRandomCity();
                 }
             }
         });
+
 
         startGame(gameMode);
     </script>
