@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <title>CountryGuessr</title>
+    <link rel="icon" type="image/x-icon" href="https://cdn-icons-png.flaticon.com/512/4830/4830735.png">
+    <style>
+        body {
+            background-color: black;
+            color: white;
+            font-family: sans-serif;
+        }
+
+        h1 {
+            text-align: left;
+        }
+
+        #map {
+            height: 1170px;
+            width: 100%;
+            margin-top: 10px;
+            margin-bottom: 20px;
+        }
+
+        #info {
+            font-size: 18px;
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .correct {
+            color: rgb(0, 180, 0);
+            font-weight: bold;
+        }
+
+        .incorrect {
+            color: red;
+        }
+
+        button {
+            background-color: black;
+            color: white;
+            border: 1px solid white;
+        }
+
+        button:hover {
+            background-color: white;
+            color: black;
+            border: 1px solid black;
+        }
+
+        #filters {
+            padding-bottom: 55px;
+            margin-bottom: 10px;
+            float: right;
+        }
+
+        #custom {
+            width: 232px;
+            height: 50px;
+            font-weight: bold;
+        }
+
+        .active-mode {
+            background-color: #646464;
+            color: white;
+        }
+
+        #winStreakRecord {
+            text-align: left;
+            margin-left: 0;
+        }
+
+        .pspace {
+            font-size: 13px;
+            color: rgb(117, 117, 117);
+        }
+
+        .blue {
+            color: blue;
+        }
+        #map:focus {
+            outline: none;
+        }
+        a {
+            color: white;
+            text-decoration: none;
+        }
+        .flag {
+            height: 15px;
+            float: center;
+            margin-left: 10px;
+        }
+        select {
+            background-color: black;
+            color: white;
+            height: 40px;
+
+        }
+    </style>
+</head>
+<body>
+    <div id="filters">
+        <select id="continentSelect" onchange="filterByContinent()">
+            <option value="All">🌐 Wszystkie kontynenty</option>
+            <option value="Africa">🌍 Afryka</option>
+            <option value="Asia">🌏 Azja</option>
+            <option value="Europe">🌍 Europa</option>
+            <option value="North America">🌎 Ameryka Północna</option>
+            <option value="South America">🌎 Ameryka Południowa</option>
+            <option value="Oceania">🌏 Oceania</option>
+        </select>
+    </div>
+    <h1><a href="index.html">Miauczyx CountryGuessr!</a></h1>
+
+    
+
+    <div id="winStreakRecord">Rekord Win Streak: 0</div>
+
+    <div id="info">Ładowanie mapy...</div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const map = L.map('map', {
+            center: [20, 0],
+            zoom: 2,
+            maxBounds: [
+                [-190, -250], // dolny lewy róg (szerokość, długość geograficzna)
+                [190, 250]    // górny prawy róg (szerokość, długość geograficzna)
+            ],
+            maxBoundsViscosity: 0.7, // opcja zmieniająca elastyczność granic
+        });
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors, © CartoDB'
+        }).addTo(map);
+
+        function openCustomPage() {
+            window.location.href = "custom.html";
+        }
+
+        let geojson;
+        let drawnCountry;  // Nowa zmienna, która przechowuje wylosowany kraj
+        let drawnCountryLayer;
+        let selectedCountry;
+        let selectedLayer;
+        let winstreak = 0;
+        let isCountrySelected = false;
+        let isAnswerGiven = false;
+        let cStreak = localStorage.getItem('cStreak') ? parseInt(localStorage.getItem('cStreak')) : 0;
+        const fullCountries = [
+            "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria",
+            "Azerbaijan", "The Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", 
+            "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cape Verde", 
+            "Cambodia", "Cameroon", "Canada", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Republic of Congo", 
+            "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czech Republic", "Democratic Republic of the Congo", "Denmark", "Djibouti", 
+            "Dominica", "Dominican Republic", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", 
+            "Swaziland", "Ethiopia", "Fiji", "Finland", "France", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", 
+            "Guatemala", "Guinea", "Guinea Bissau", "Guyana", "Haiti", "Honduras", "Hungary", "Iceland", "India", "Indonesia", 
+            "Iran", "Iraq", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kiribati", "North Korea", 
+            "South Korea", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", 
+            "Lithuania", "Luxembourg", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", 
+            "Mauritius", "Mexico", "Federated States of Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar", 
+            "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "Macedonia", "Norway", 
+            "Oman", "Pakistan", "Palau", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal", 
+            "Qatar", "Romania", "Russia", "Rwanda", "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", 
+            "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Republic of Serbia", "Seychelles", "Sierra Leone", 
+            "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Sudan", "Spain", "Sri Lanka", 
+            "Sudan", "Suriname", "Sweden", "Switzerland", "Syria", "Taiwan", "Tajikistan", "United Republic of Tanzania", "Thailand", "East Timor", 
+            "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", 
+            "United Kingdom", "United States of America", "Uruguay", "Uzbekistan", "Vanuatu", "Vatican", "Venezuela", "Vietnam", "Yemen", 
+            "Zambia", "Zimbabwe", "Kosovo", "Palestine", "Ivory Coast"
+        ];
+
+
+        // Funkcja zmieniająca granice zaznaczonego kraju na przezroczyste
+        function highlightCountry(e) {
+            if (isAnswerGiven) return;
+            if (selectedLayer) {
+                geojson.resetStyle(selectedLayer); // Reset poprzedni
+            }
+            selectedLayer = e.target;
+            selectedLayer.setStyle({
+                fillColor: 'blue',
+                weight: 2,                // Grubość granic po zaznaczeniu
+                color: 'black',           // Granice będą przezroczyste po zaznaczeniu
+                fillOpacity: 0.4          // Przezroczystość wypełnienia (zielone)
+            });
+            // Zapisz nazwę klikniętego kraju
+            selectedCountry = e.target.feature.properties.ADMIN;
+            selected2 = e.target.feature.properties.ISO_A2.toLowerCase();
+        }
+
+        function onEachFeature(feature, layer) {
+            layer.on({
+                click: highlightCountry
+            });
+        }
+
+        // Funkcja do załadowania danych GeoJSON i wyboru losowego kraju
+        function loadGeoJSON() {
+            fetch("https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson")
+                .then(res => res.json())
+                .then(data => {
+                    data.features.forEach(feature => {
+                        if (feature.properties.ADMIN === "Kosovo") {
+                            feature.properties.ISO_A2 = "xk"; // Replace Kosovo's ISO_A2 with "xk"
+                        }
+                    });
+                    geojson = L.geoJSON(data, {
+                        style: {
+                            fillColor: 'transparent', // Przezroczysty kolor wypełnienia
+                            weight: 1,                // Grubość granic (większa niż poprzednia)
+                            color: 'black',           // Kolor granic na czarno
+                            fillOpacity: 0.1          // Przezroczystość wypełnienia
+                        },
+                        onEachFeature: onEachFeature
+                    }).addTo(map);
+
+                    // Wybór losowego kraju
+                    const countries = data.features.filter(feature => fullCountries.includes(feature.properties.ADMIN));
+
+                    const randomIndex = Math.floor(Math.random() * countries.length);
+                    draw = countries[randomIndex];
+                    drawnCountry = draw.properties.ADMIN;
+                    drawn2 = draw.properties.ISO_A2.toLowerCase();
+                    drawnCountryLayer = geojson.getLayers().find(layer => layer.feature.properties.ADMIN === drawnCountry);
+                    document.getElementById('winStreakRecord').innerHTML = `Rekord Win Streak: ${cStreak}`;
+                    document.getElementById('info').innerHTML = `Zaznacz na mapie kraj: <span class="correct">${drawnCountry}</span><img src="https://flagcdn.com/w320/${drawn2}.png" class="flag"><br><br><span class="pspace">po zaznaczeniu naciśnij spację</span>`;
+                });
+        }
+
+        // Obsługa naciśnięcia spacji
+        document.addEventListener('keydown', function(event) {
+            if (event.key === ' ') {
+                if (!isCountrySelected) {
+                    if (selectedLayer && selectedCountry === drawnCountry) {
+                        winstreak++;
+                        document.getElementById('info').innerHTML = `💎Zgadłeś kraj: <span class="correct">${selectedCountry}</span><img src="https://flagcdn.com/w320/${drawn2}.png" class="flag"> Twój Win Streak to: <span class="blue">${winstreak}</span><br><span class="pspace">naciśnij spację</span>`;
+                        if (winstreak > cStreak) {
+                            cStreak = winstreak;
+                            localStorage.setItem('cStreak', cStreak);
+                        }
+                        document.getElementById('winStreakRecord').innerHTML = `Rekord Win Streak: ${cStreak}`;
+                        selectedLayer.setStyle({
+                            fillColor: 'green',
+                            weight: 2,
+                            color: 'black',
+                            fillOpacity: 0.4
+                        });
+                    } else {
+                        document.getElementById('info').innerHTML = `Nie zgadłeś kraju! Wybrałeś kraj: <span class="incorrect">${selectedCountry}</span><img src="https://flagcdn.com/w320/${selected2}.png" class="flag"><br>Straciłeś winstreak: <span class="blue">${winstreak}</span><br>Poprawny kraj to: <span class="correct">${drawnCountry}</span><img src="https://flagcdn.com/w320/${drawn2}.png" class="flag"><br><span class="pspace">naciśnij spację</span>`;
+                        winstreak = 0;
+                        selectedLayer.setStyle({
+                            fillColor: 'orange',
+                            weight: 2,
+                            color: 'black',
+                            fillOpacity: 0.4
+                        });
+                        if (drawnCountryLayer) {
+                            drawnCountryLayer.setStyle({
+                                fillColor: 'red', // Możesz ustawić inny kolor (np. zielony)
+                                weight: 2,
+                                color: 'black',
+                                fillOpacity: 0.4
+                            });
+                            const bounds = drawnCountryLayer.getBounds(); // Pobierz granice wylosowanego kraju
+                            map.fitBounds(bounds);
+                        }
+                    }
+                    isCountrySelected = true;
+                    isAnswerGiven = true;
+                } else {
+                    // Resetowanie stanu bez ponownego ładowania danych
+                    if (selectedLayer) {
+                        geojson.resetStyle(selectedLayer); // Reset poprzedni
+                    }
+                    if (drawnCountryLayer) {
+                        geojson.resetStyle(drawnCountryLayer); // Reset poprzedni
+                    }
+                    isCountrySelected = false;
+                    isAnswerGiven = false;
+                    // Losowanie nowego kraju bez ładowania GeoJSON ponownie
+                    const countries = geojson.toGeoJSON().features.filter(feature => fullCountries.includes(feature.properties.ADMIN));
+                    const randomIndex = Math.floor(Math.random() * countries.length);
+                    draw = countries[randomIndex];
+                    drawnCountry = draw.properties.ADMIN;
+                    drawn2 = draw.properties.ISO_A2.toLowerCase();
+                    drawnCountryLayer = geojson.getLayers().find(layer => layer.feature.properties.ADMIN === drawnCountry);
+                    document.getElementById('info').innerHTML = `Zaznacz na mapie kraj: <span class="correct">${drawnCountry}<br></span><span class="pspace">po zaznaczeniu naciśnij spację</span>`;
+                }
+            }
+        });
+
+        // Inicjowanie ładowania GeoJSON
+        loadGeoJSON();
+    </script>
+</body>
+</html>
