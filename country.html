@@ -295,7 +295,7 @@
                     drawnCountry = draw.properties.ADMIN;
                     drawn2 = draw.properties.ISO_A2.toLowerCase();
                     drawnCountryLayer = geojson.getLayers().find(layer => layer.feature.properties.ADMIN === drawnCountry);
-                    document.getElementById('info').innerHTML = `Zaznacz na mapie kraj: <span class="correct">${drawnCountry}<br></span><span class="pspace">po zaznaczeniu naciśnij spację</span>`;
+                    document.getElementById('info').innerHTML = `Zaznacz na mapie kraj: <span class="correct">${drawnCountry}</span><img src="https://flagcdn.com/w320/${drawn2}.png" class="flag"><br><br><span class="pspace">po zaznaczeniu naciśnij spację</span>`;
                 }
             }
         });
