@@ -159,20 +159,20 @@
         const fullCountries = [
             "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria",
             "Azerbaijan", "The Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", 
-            "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cape Verde", 
-            "Cambodia", "Cameroon", "Canada", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Republic of Congo", 
-            "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czech Republic", "Democratic Republic of the Congo", "Denmark", "Djibouti", 
+            "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cabo Verde", 
+            "Cambodia", "Cameroon", "Canada", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Republic of the Congo", 
+            "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czechia", "Democratic Republic of the Congo", "Denmark", "Djibouti", 
             "Dominica", "Dominican Republic", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", 
-            "Swaziland", "Ethiopia", "Fiji", "Finland", "France", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", 
-            "Guatemala", "Guinea", "Guinea Bissau", "Guyana", "Haiti", "Honduras", "Hungary", "Iceland", "India", "Indonesia", 
+            "eSwatini", "Ethiopia", "Fiji", "Finland", "France", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", 
+            "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Honduras", "Hungary", "Iceland", "India", "Indonesia", 
             "Iran", "Iraq", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kiribati", "North Korea", 
             "South Korea", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", 
             "Lithuania", "Luxembourg", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", 
             "Mauritius", "Mexico", "Federated States of Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar", 
-            "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "Macedonia", "Norway", 
+            "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Macedonia", "Norway", 
             "Oman", "Pakistan", "Palau", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal", 
             "Qatar", "Romania", "Russia", "Rwanda", "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", 
-            "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Republic of Serbia", "Seychelles", "Sierra Leone", 
+            "Samoa", "San Marino", "São Tomé and Principe", "Saudi Arabia", "Senegal", "Republic of Serbia", "Seychelles", "Sierra Leone", 
             "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Sudan", "Spain", "Sri Lanka", 
             "Sudan", "Suriname", "Sweden", "Switzerland", "Syria", "Taiwan", "Tajikistan", "United Republic of Tanzania", "Thailand", "East Timor", 
             "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", 
@@ -195,8 +195,8 @@
                 fillOpacity: 0.4          // Przezroczystość wypełnienia (zielone)
             });
             // Zapisz nazwę klikniętego kraju
-            selectedCountry = e.target.feature.properties.ADMIN;
-            selected2 = e.target.feature.properties.ISO_A2.toLowerCase();
+            selectedCountry = e.target.feature.properties.name;
+            selected2 = e.target.feature.properties["ISO3166-1-Alpha-2"].toLowerCase();
         }
 
         function onEachFeature(feature, layer) {
@@ -211,8 +211,11 @@
                 .then(res => res.json())
                 .then(data => {
                     data.features.forEach(feature => {
-                        if (feature.properties.ADMIN === "Kosovo") {
-                            feature.properties.ISO_A2 = "xk"; // Replace Kosovo's ISO_A2 with "xk"
+                        if (feature.properties.name === "Kosovo") {
+                            feature.properties["ISO3166-1-Alpha-2"] = "xk";
+                        }
+                        if (feature.properties.name === "Taiwan") {
+                            feature.properties["ISO3166-1-Alpha-2"] = "tw"; // Replace Kosovo's ISO_A2 with "xk"
                         }
                     });
                     geojson = L.geoJSON(data, {
@@ -224,15 +227,21 @@
                         },
                         onEachFeature: onEachFeature
                     }).addTo(map);
-
                     // Wybór losowego kraju
-                    const countries = data.features.filter(feature => fullCountries.includes(feature.properties.ADMIN));
+                    const countries = data.features.filter(feature => fullCountries.includes(feature.properties.name));
+                    let output = "";
+                    for (let i = 0; i < 190; i++) {
+                        output += countries[i].properties.name + ", ";
+                    }
+                    console.log(output);
+                    console.log(countries.length);
+
 
                     const randomIndex = Math.floor(Math.random() * countries.length);
                     draw = countries[randomIndex];
-                    drawnCountry = draw.properties.ADMIN;
-                    drawn2 = draw.properties.ISO_A2.toLowerCase();
-                    drawnCountryLayer = geojson.getLayers().find(layer => layer.feature.properties.ADMIN === drawnCountry);
+                    drawnCountry = draw.properties.name;
+                    drawn2 = draw.properties["ISO3166-1-Alpha-2"].toLowerCase();
+                    drawnCountryLayer = geojson.getLayers().find(layer => layer.feature.properties.name === drawnCountry);
                     document.getElementById('winStreakRecord').innerHTML = `Rekord Win Streak: ${cStreak}`;
                     document.getElementById('info').innerHTML = `Zaznacz na mapie kraj: <span class="correct">${drawnCountry}</span><img src="https://flagcdn.com/w320/${drawn2}.png" class="flag"><br><br><span class="pspace">po zaznaczeniu naciśnij spację</span>`;
                 });
@@ -289,13 +298,13 @@
                     isCountrySelected = false;
                     isAnswerGiven = false;
                     // Losowanie nowego kraju bez ładowania GeoJSON ponownie
-                    const countries = geojson.toGeoJSON().features.filter(feature => fullCountries.includes(feature.properties.ADMIN));
+                    const countries = geojson.toGeoJSON().features.filter(feature => fullCountries.includes(feature.properties.name));
                     const randomIndex = Math.floor(Math.random() * countries.length);
                     draw = countries[randomIndex];
-                    drawnCountry = draw.properties.ADMIN;
-                    drawn2 = draw.properties.ISO_A2.toLowerCase();
-                    drawnCountryLayer = geojson.getLayers().find(layer => layer.feature.properties.ADMIN === drawnCountry);
-                    document.getElementById('info').innerHTML = `Zaznacz na mapie kraj: <span class="correct">${drawnCountry}</span><img src="https://flagcdn.com/w320/${drawn2}.png" class="flag"><br><br><span class="pspace">po zaznaczeniu naciśnij spację</span>`;
+                    drawnCountry = draw.properties.name;
+                    drawn2 = draw.properties["ISO3166-1-Alpha-2"].toLowerCase();
+                    drawnCountryLayer = geojson.getLayers().find(layer => layer.feature.properties.name === drawnCountry);
+                    document.getElementById('info').innerHTML = `Zaznacz na mapie kraj: <span class="correct">${drawnCountry}<br></span><span class="pspace">po zaznaczeniu naciśnij spację</span>`;
                 }
             }
         });
